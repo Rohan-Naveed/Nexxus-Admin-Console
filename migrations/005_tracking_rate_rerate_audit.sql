@@ -1,0 +1,10 @@
+BEGIN;
+
+ALTER TABLE sync_history
+    ADD COLUMN IF NOT EXISTS re_rate BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE payroll_weeks
+    ALTER COLUMN gross_percentage DROP DEFAULT,
+    ALTER COLUMN tracking_percentage DROP DEFAULT;
+
+COMMIT;

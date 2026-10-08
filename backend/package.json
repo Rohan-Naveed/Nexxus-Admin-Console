@@ -1,0 +1,27 @@
+{
+  "name": "nexxus-admin-console-api",
+  "version": "1.0.0",
+  "description": "Backend API for the Nexxus Logistics dispatcher admin console",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "scheduler": "node src/scheduler.js",
+    "scheduler:dev": "node --watch src/scheduler.js",
+    "sync:simulate": "node src/modules/sync/sync.simulator.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^10.0.13",
+    "pg": "^8.12.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

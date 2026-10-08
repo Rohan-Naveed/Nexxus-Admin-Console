@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Local configuration and secrets
+config.json
+**/config.json
+backend/config/credentials.json

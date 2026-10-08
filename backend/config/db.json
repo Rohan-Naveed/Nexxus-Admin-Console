@@ -1,0 +1,106 @@
+{
+  "users": {
+    "selectByEmail": "SELECT * FROM users WHERE email = $1",
+    "selectById": "SELECT * FROM users WHERE id = $1",
+    "selectAdmin": "SELECT * FROM users WHERE role = 'admin' LIMIT 1",
+    "insert": "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING *"
+  },
+  "dispatchers": {
+    "selectAll": "SELECT * FROM dispatchers ORDER BY name ASC",
+    "selectById": "SELECT * FROM dispatchers WHERE id = $1",
+    "selectBySlug": "SELECT * FROM dispatchers WHERE slug = $1",
+    "insert": "INSERT INTO dispatchers (slug, name, dispatch_alias, commission_percentage, basic_salary_monthly, fuel_allowance_monthly, default_cash_amount, email, phone, address, dob, gender, designation, cnic, account_number, status, joined_date, left_date, google_sheet_id, google_sheet_tab, created_by, updated_by, employee_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $21, $22) RETURNING *",
+    "update": "UPDATE dispatchers SET name = $2, dispatch_alias = $3, commission_percentage = $4, basic_salary_monthly = $5, fuel_allowance_monthly = $6, default_cash_amount = $7, email = $8, phone = $9, address = $10, dob = $11, gender = $12, designation = $13, cnic = $14, account_number = $15, status = $16, joined_date = $17, left_date = $18, google_sheet_id = $19, google_sheet_tab = $20, employee_type = $21, updated_by = $22, updated_at = now() WHERE id = $1",
+    "updateReturning": "UPDATE dispatchers SET name = $2, dispatch_alias = $3, commission_percentage = $4, basic_salary_monthly = $5, fuel_allowance_monthly = $6, default_cash_amount = $7, email = $8, phone = $9, address = $10, dob = $11, gender = $12, designation = $13, cnic = $14, account_number = $15, status = $16, joined_date = $17, left_date = $18, google_sheet_id = $19, google_sheet_tab = $20, employee_type = $21, updated_by = $22, updated_at = now() WHERE id = $1 RETURNING *",
+    "delete": "DELETE FROM dispatchers WHERE id = $1",
+    "deleteReturning": "DELETE FROM dispatchers WHERE id = $1 RETURNING *",
+    "selectUnlinkedSheets": "SELECT * FROM dispatchers WHERE employee_type = 'dispatcher' AND (google_sheet_id IS NULL OR google_sheet_tab IS NULL OR google_sheet_id = '' OR google_sheet_tab = '') ORDER BY name ASC"
+  },
+  "payrollWeeks": {
+    "selectByDispatcher": "SELECT * FROM payroll_weeks WHERE dispatcher_id = $1 ORDER BY period_year DESC, period_month DESC, week_number ASC",
+    "selectByDispatcherAndMonth": "SELECT * FROM payroll_weeks WHERE dispatcher_id = $1 AND period_year = $2 AND period_month = $3 ORDER BY week_number ASC",
+    "selectMonthlyTotals": "SELECT dispatcher_id, period_year, period_month, SUM(gross_amount) AS monthly_gross, SUM(tracking_fee_amount) AS monthly_tracking_fees, COUNT(*) FILTER (WHERE gross_amount IS NOT NULL) AS synced_weeks FROM payroll_weeks WHERE period_year = $1 AND period_month = $2 GROUP BY dispatcher_id, period_year, period_month",
+    "selectYearlyTotals": "SELECT dispatcher_id, period_year, SUM(gross_amount) AS yearly_gross, SUM(tracking_fee_amount) AS yearly_tracking_fees FROM payroll_weeks WHERE period_year = $1 GROUP BY dispatcher_id, period_year",
+    "upsert": "INSERT INTO payroll_weeks (dispatcher_id, period_year, period_month, week_number, gross_amount, synced_at, sync_source, gross_percentage, tracking_percentage, tracking_fee_amount) VALUES ($1, $2, $3, $4, $5, now(), $6, $7, $8, $9) ON CONFLICT (dispatcher_id, period_year, period_month, week_number) DO UPDATE SET gross_amount = EXCLUDED.gross_amount, synced_at = now(), sync_source = EXCLUDED.sync_source, gross_percentage = CASE WHEN $10::boolean THEN EXCLUDED.gross_percentage ELSE payroll_weeks.gross_percentage END, tracking_percentage = CASE WHEN $10::boolean THEN EXCLUDED.tracking_percentage ELSE payroll_weeks.tracking_percentage END, tracking_fee_amount = CASE WHEN EXCLUDED.gross_amount IS NULL THEN NULL ELSE (EXCLUDED.gross_amount / ((CASE WHEN $10::boolean THEN EXCLUDED.gross_percentage ELSE payroll_weeks.gross_percentage END) / 100)) * ((CASE WHEN $10::boolean THEN EXCLUDED.tracking_percentage ELSE payroll_weeks.tracking_percentage END) / 100) END, updated_at = now() RETURNING *",
+    "delete": "DELETE FROM payroll_weeks WHERE id = $1",
+    "selectByMonth": "SELECT * FROM payroll_weeks WHERE period_year = $1 AND period_month = $2",
+    "selectSyncedSince": "SELECT dispatcher_id, period_year, period_month, week_number FROM payroll_weeks WHERE gross_amount IS NOT NULL AND (period_year * 100 + period_month) >= $1",
+    "selectAllSynced": "SELECT * FROM payroll_weeks WHERE gross_amount IS NOT NULL ORDER BY period_year, period_month, week_number, dispatcher_id"
+  },
+  "usdPkrRates": {
+    "selectAll": "SELECT * FROM usd_pkr_rates ORDER BY period_year DESC, period_month DESC",
+    "selectByPeriod": "SELECT * FROM usd_pkr_rates WHERE period_year = $1 AND period_month = $2",
+    "selectLatest": "SELECT * FROM usd_pkr_rates ORDER BY period_year DESC, period_month DESC LIMIT 1",
+    "upsert": "INSERT INTO usd_pkr_rates (period_year, period_month, rate_pkr_per_usd, created_by, updated_by) VALUES ($1, $2, $3, $4, $4) ON CONFLICT (period_year, period_month) DO UPDATE SET rate_pkr_per_usd = EXCLUDED.rate_pkr_per_usd, updated_by = EXCLUDED.updated_by, updated_at = now() RETURNING *"
+  },
+  "taxRates": {
+    "selectAll": "SELECT * FROM tax_rates ORDER BY period_year DESC, period_month DESC",
+    "selectByPeriod": "SELECT * FROM tax_rates WHERE period_year = $1 AND period_month = $2",
+    "selectLatest": "SELECT * FROM tax_rates ORDER BY period_year DESC, period_month DESC LIMIT 1",
+    "upsert": "INSERT INTO tax_rates (period_year, period_month, tax_percent, created_by, updated_by) VALUES ($1, $2, $3, $4, $4) ON CONFLICT (period_year, period_month) DO UPDATE SET tax_percent = EXCLUDED.tax_percent, updated_by = EXCLUDED.updated_by, updated_at = now() RETURNING *"
+  },
+  "properties": {
+    "selectTracking": "SELECT property_key, numeric_value, updated_at, updated_by FROM properties WHERE property_key IN ('gross_percentage', 'tracking_percentage')",
+    "upsertTracking": "INSERT INTO properties (property_key, numeric_value, updated_by) VALUES ('gross_percentage', $1, $3), ('tracking_percentage', $2, $3) ON CONFLICT (property_key) DO UPDATE SET numeric_value = EXCLUDED.numeric_value, updated_by = EXCLUDED.updated_by, updated_at = now() RETURNING property_key, numeric_value, updated_at, updated_by"
+  },
+  "expenseCategories": {
+    "selectAll": "SELECT * FROM expense_categories ORDER BY label ASC"
+  },
+  "expenses": {
+    "selectAll": "SELECT * FROM expenses ORDER BY expense_date DESC",
+    "selectById": "SELECT * FROM expenses WHERE id = $1",
+    "selectByDateRange": "SELECT * FROM expenses WHERE expense_date BETWEEN $1 AND $2 ORDER BY expense_date DESC",
+    "insert": "INSERT INTO expenses (category_key, amount, expense_date, note, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $5) RETURNING *",
+    "update": "UPDATE expenses SET category_key = $2, amount = $3, expense_date = $4, note = $5, updated_by = $6, updated_at = now() WHERE id = $1",
+    "updateReturning": "UPDATE expenses SET category_key = $2, amount = $3, expense_date = $4, note = $5, updated_by = $6, updated_at = now() WHERE id = $1 RETURNING *",
+    "delete": "DELETE FROM expenses WHERE id = $1",
+    "deleteReturning": "DELETE FROM expenses WHERE id = $1 RETURNING *"
+  },
+  "fineTypes": {
+    "selectAll": "SELECT * FROM fine_types ORDER BY label ASC"
+  },
+  "fines": {
+    "selectAll": "SELECT * FROM fines ORDER BY fine_date DESC",
+    "selectById": "SELECT * FROM fines WHERE id = $1",
+    "selectByDispatcher": "SELECT * FROM fines WHERE dispatcher_id = $1 ORDER BY fine_date DESC",
+    "insert": "INSERT INTO fines (dispatcher_id, type_key, amount, fine_date, reason, note, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING *",
+    "update": "UPDATE fines SET dispatcher_id = $2, type_key = $3, amount = $4, fine_date = $5, reason = $6, note = $7, updated_by = $8, updated_at = now() WHERE id = $1",
+    "updateReturning": "UPDATE fines SET dispatcher_id = $2, type_key = $3, amount = $4, fine_date = $5, reason = $6, note = $7, updated_by = $8, updated_at = now() WHERE id = $1 RETURNING *",
+    "delete": "DELETE FROM fines WHERE id = $1",
+    "deleteReturning": "DELETE FROM fines WHERE id = $1 RETURNING *"
+  },
+  "salarySlips": {
+    "selectAll": "SELECT * FROM salary_slips ORDER BY period_year DESC, period_month DESC",
+    "selectHistory": "SELECT * FROM salary_slip_history ORDER BY event_at DESC, id DESC",
+    "selectByDispatcher": "SELECT * FROM salary_slips WHERE dispatcher_id = $1 ORDER BY period_year DESC, period_month DESC",
+    "selectOne": "SELECT * FROM salary_slips WHERE dispatcher_id = $1 AND period_year = $2 AND period_month = $3",
+    "selectForEmail": "SELECT salary_slips.*, dispatchers.email AS current_employee_email FROM salary_slips JOIN dispatchers ON dispatchers.id = salary_slips.dispatcher_id WHERE salary_slips.id = $1",
+    "selectById": "SELECT * FROM salary_slips WHERE id = $1",
+    "resetEmailStatus": "UPDATE salary_slips SET email_status = 'not_sent', email_sent_at = NULL, email_sent_to = NULL, email_sent_by = NULL, email_last_attempt_at = NULL, email_last_error = NULL WHERE id = $1 RETURNING *",
+    "markEmailSending": "UPDATE salary_slips SET email_status = 'sending', email_last_attempt_at = now(), email_last_error = NULL WHERE id = $1 AND email_status <> 'sending' RETURNING *",
+    "markEmailSent": "UPDATE salary_slips SET email_status = 'sent', email_sent_at = now(), email_sent_to = $2, email_sent_by = $3, email_last_error = NULL WHERE id = $1 RETURNING *",
+    "insertGeneratedHistory": "INSERT INTO salary_slip_history (salary_slip_id, dispatcher_id, dispatcher_name, dispatch_alias, period_year, period_month, event_type, actor) VALUES ($1, $2, $3, $4, $5, $6, 'generated', $7) RETURNING *",
+    "insertEmailSentHistory": "INSERT INTO salary_slip_history (salary_slip_id, dispatcher_id, dispatcher_name, dispatch_alias, period_year, period_month, event_type, actor, email) VALUES ($1, $2, $3, $4, $5, $6, 'email_sent', $7, $8) RETURNING *",
+    "markEmailFailed": "UPDATE salary_slips SET email_status = 'failed', email_last_error = $2 WHERE id = $1 RETURNING *",
+    "upsert": "INSERT INTO salary_slips (dispatcher_id, period_year, period_month, dispatcher_name, dispatch_alias, designation, cnic, account_number, email, usd_per_pkr, tax_percent, monthly_gross_usd, commission_percent, commission_usd, amount_in_pkr, basic_salary, fuel_allowance, total_earnings, late_fine, violation_fine, advance, income_tax, total_deductions, net_pay, cash_amount, account_amount, generated_by, employee_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) ON CONFLICT (dispatcher_id, period_year, period_month) DO UPDATE SET dispatcher_name = EXCLUDED.dispatcher_name, dispatch_alias = EXCLUDED.dispatch_alias, employee_type = EXCLUDED.employee_type, designation = EXCLUDED.designation, cnic = EXCLUDED.cnic, account_number = EXCLUDED.account_number, email = EXCLUDED.email, usd_per_pkr = EXCLUDED.usd_per_pkr, tax_percent = EXCLUDED.tax_percent, monthly_gross_usd = EXCLUDED.monthly_gross_usd, commission_percent = EXCLUDED.commission_percent, commission_usd = EXCLUDED.commission_usd, amount_in_pkr = EXCLUDED.amount_in_pkr, basic_salary = EXCLUDED.basic_salary, fuel_allowance = EXCLUDED.fuel_allowance, total_earnings = EXCLUDED.total_earnings, late_fine = EXCLUDED.late_fine, violation_fine = EXCLUDED.violation_fine, advance = EXCLUDED.advance, income_tax = EXCLUDED.income_tax, total_deductions = EXCLUDED.total_deductions, net_pay = EXCLUDED.net_pay, cash_amount = EXCLUDED.cash_amount, account_amount = EXCLUDED.account_amount, generated_by = EXCLUDED.generated_by, generated_at = now(), updated_at = now() RETURNING *",
+    "delete": "DELETE FROM salary_slips WHERE id = $1"
+  },
+  "syncHistory": {
+    "insert": "INSERT INTO sync_history (run_id, dispatcher_id, dispatcher_name, period_year, period_month, week_number, trigger_type, triggered_by, status, gross_amount, error_message, note, re_rate) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *",
+    "list": "SELECT * FROM sync_history WHERE ($1::int IS NULL OR dispatcher_id = $1) AND ($2::int IS NULL OR period_year = $2) AND ($3::int IS NULL OR period_month = $3) AND ($4::text IS NULL OR trigger_type = $4) AND ($5::text IS NULL OR status = $5) ORDER BY synced_at DESC, id DESC LIMIT $6 OFFSET $7",
+    "count": "SELECT COUNT(*) AS total FROM sync_history WHERE ($1::int IS NULL OR dispatcher_id = $1) AND ($2::int IS NULL OR period_year = $2) AND ($3::int IS NULL OR period_month = $3) AND ($4::text IS NULL OR trigger_type = $4) AND ($5::text IS NULL OR status = $5)",
+    "latestPerWeekForMonth": "SELECT DISTINCT ON (dispatcher_id, week_number) * FROM sync_history WHERE dispatcher_id IS NOT NULL AND period_year = $1 AND period_month = $2 ORDER BY dispatcher_id, week_number, synced_at DESC, id DESC",
+    "latestPerWeekSince": "SELECT DISTINCT ON (dispatcher_id, period_year, period_month, week_number) dispatcher_id, period_year, period_month, week_number, status, synced_at FROM sync_history WHERE dispatcher_id IS NOT NULL AND (period_year * 100 + period_month) >= $1 ORDER BY dispatcher_id, period_year, period_month, week_number, synced_at DESC, id DESC",
+    "lastSchedulerRun": "SELECT MAX(synced_at) AS last_run FROM sync_history WHERE trigger_type = 'scheduler'",
+    "failedCount": "SELECT COUNT(*) AS failed FROM (SELECT DISTINCT ON (dispatcher_id, period_year, period_month, week_number) status FROM sync_history WHERE dispatcher_id IS NOT NULL AND synced_at > now() - interval '60 days' ORDER BY dispatcher_id, period_year, period_month, week_number, synced_at DESC, id DESC) latest WHERE status = 'failed'"
+  },
+  "calendarWeeks": {
+    "selectAll": "SELECT id, period_year, period_month, week_number, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date, updated_by, updated_at FROM calendar_weeks ORDER BY start_date",
+    "selectRange": "SELECT id, period_year, period_month, week_number, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date, updated_by, updated_at FROM calendar_weeks WHERE (period_year * 100 + period_month) BETWEEN $1 AND $2 ORDER BY start_date",
+    "selectEnded": "SELECT id, period_year, period_month, week_number, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date, updated_by, updated_at FROM calendar_weeks WHERE end_date < $1::date ORDER BY start_date",
+    "selectMonth": "SELECT id, period_year, period_month, week_number, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date, updated_by, updated_at FROM calendar_weeks WHERE period_year = $1 AND period_month = $2 ORDER BY week_number",
+    "deleteMonth": "DELETE FROM calendar_weeks WHERE period_year = $1 AND period_month = $2",
+    "insert": "INSERT INTO calendar_weeks (period_year, period_month, week_number, start_date, end_date, created_by, updated_by) VALUES ($1, $2, $3, $4::date, $5::date, $6, $6)",
+    "syncedWeeks": "SELECT period_year, period_month, week_number FROM payroll_weeks WHERE gross_amount IS NOT NULL UNION SELECT period_year, period_month, week_number FROM sync_history WHERE status = 'success'"
+  }
+}
