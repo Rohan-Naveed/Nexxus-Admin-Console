@@ -8,6 +8,7 @@ import {
   Settings,
   RefreshCw,
   CalendarDays,
+  Tags,
   Menu,
   Truck,
   ChevronDown,
@@ -57,6 +58,7 @@ import DispatcherDetailModal from "./components/DispatcherDetailModal";
 import DispatcherFormModal from "./components/DispatcherFormModal";
 import PeriodDateBanner from "./components/PeriodDateBanner";
 import TrackingTab from "./components/TrackingTab";
+import PropertiesTab from "./components/PropertiesTab";
 
 const iconMap = {
   LayoutDashboard,
@@ -68,6 +70,7 @@ const iconMap = {
   AlertTriangle,
   RefreshCw,
   CalendarDays,
+  Tags,
   Activity,
 };
 
@@ -96,7 +99,9 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
   const [dispatcherForm, setDispatcherForm] = useState(null); // { mode: "add" } | { mode: "edit", dispatcher }
   const [dispatcherFeedback, setDispatcherFeedback] = useState(null);
   const [expenseEntries, setExpenseEntries] = useState([]);
+  const [expenseCategories, setExpenseCategories] = useState([]);
   const [fineEntries, setFineEntries] = useState([]);
+  const [deductionCategories, setDeductionCategories] = useState([]);
   const [slips, setSlips] = useState([]);
   const [slipHistory, setSlipHistory] = useState([]);
   const [slipMonthKey, setSlipMonthKey] = useState(() =>
@@ -149,7 +154,9 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
           rate,
           latestTaxRate,
           allExpenses,
+          allExpenseCategories,
           allFines,
+          allDeductionCategories,
           allSlips,
           allSlipHistory,
           payrollWeeks,
@@ -161,7 +168,9 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
           rateService.fetchUsdPerPkr(),
           rateService.fetchTaxPercent(),
           expenseService.fetchAllExpenses(),
+          expenseService.fetchAllCategories(),
           finesService.fetchAllFines(),
+          finesService.fetchAllCategories(),
           slipService.fetchAllSlips(),
           slipService.fetchSlipHistory(),
           payrollService.fetchAllWeeks(),
@@ -182,7 +191,9 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
         setUsdPerPkr(rate);
         setTaxPercent(latestTaxRate);
         setExpenseEntries(allExpenses);
+        setExpenseCategories(allExpenseCategories);
         setFineEntries(allFines);
+        setDeductionCategories(allDeductionCategories);
         setSlips(allSlips);
         setSlipHistory(allSlipHistory);
       } catch (err) {
@@ -392,6 +403,30 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
     setExpenseEntries(await expenseService.fetchAllExpenses());
   }
 
+  async function reloadExpenseCategories() {
+    setExpenseCategories(await expenseService.fetchAllCategories());
+  }
+
+  async function createExpenseCategory(payload) {
+    await expenseService.createCategory(payload);
+    await reloadExpenseCategories();
+  }
+
+  async function updateExpenseCategory(key, patch) {
+    await expenseService.updateCategory(key, patch);
+    await reloadExpenseCategories();
+  }
+
+  async function archiveExpenseCategory(key) {
+    await expenseService.archiveCategory(key);
+    await reloadExpenseCategories();
+  }
+
+  async function deleteExpenseCategory(key) {
+    await expenseService.deleteCategory(key);
+    await reloadExpenseCategories();
+  }
+
   async function handleAddFine(payload) {
     await finesService.addFine(payload);
     setFineEntries(await finesService.fetchAllFines());
@@ -405,6 +440,30 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
   async function handleDeleteFine(id) {
     await finesService.deleteFine(id);
     setFineEntries(await finesService.fetchAllFines());
+  }
+
+  async function reloadDeductionCategories() {
+    setDeductionCategories(await finesService.fetchAllCategories());
+  }
+
+  async function createDeductionCategory(payload) {
+    await finesService.createCategory(payload);
+    await reloadDeductionCategories();
+  }
+
+  async function updateDeductionCategory(key, patch) {
+    await finesService.updateCategory(key, patch);
+    await reloadDeductionCategories();
+  }
+
+  async function archiveDeductionCategory(key) {
+    await finesService.archiveCategory(key);
+    await reloadDeductionCategories();
+  }
+
+  async function deleteDeductionCategory(key) {
+    await finesService.deleteCategory(key);
+    await reloadDeductionCategories();
   }
 
   async function handleGenerateSlip(payload) {
@@ -455,17 +514,18 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
   }
 
   const payrollSummary = useMemo(() => {
-    const totalPayroll = payrollRows.reduce(
-      (sum, row) => sum + row.netPayout,
+    const totalSalaryEarned = payrollRows.reduce(
+      (sum, row) => sum + row.total,
       0,
     );
     const totalExpenses = expensesForPeriod.total;
     return {
       gross: totals.gross,
       trackingFees: totals.trackingFees,
-      payroll: totalPayroll,
+      salaryEarned: totalSalaryEarned,
       expenses: totalExpenses,
-      profit: totals.gross + totals.trackingFees - totalPayroll - totalExpenses,
+      profit:
+        totals.gross + totals.trackingFees - totalSalaryEarned - totalExpenses,
     };
   }, [payrollRows, expensesForPeriod, totals.gross, totals.trackingFees]);
 
@@ -508,7 +568,9 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
   // Group navigation entries are not pages themselves; content and active
   // controls use the selected child tab via `effectiveTab`.
   const effectiveTab =
-    activeTab === "payroll-overview" || activeTab === "reports-overview"
+    activeTab === "payroll-overview" ||
+    activeTab === "reports-overview" ||
+    activeTab === "properties-overview"
       ? groupSubTab
       : activeTab;
 
@@ -526,6 +588,8 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
     "tracking",
     "calendar",
     "sync",
+    "expense-categories",
+    "deduction-categories",
   ]);
   const showPeriodControls = !periodlessTabs.has(effectiveTab);
   const currentPeriodKey = (() => {
@@ -719,7 +783,25 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
           {/* The per-dispatcher "last synced" chip row was removed — sync
               status now lives only in the Sync Center tab. */}
 
-          {effectiveTab === "overview" ? (
+          {effectiveTab === "expense-categories" ? (
+            <PropertiesTab
+              type="expense"
+              categories={expenseCategories}
+              onCreate={createExpenseCategory}
+              onUpdate={updateExpenseCategory}
+              onArchive={archiveExpenseCategory}
+              onDelete={deleteExpenseCategory}
+            />
+          ) : effectiveTab === "deduction-categories" ? (
+            <PropertiesTab
+              type="deduction"
+              categories={deductionCategories}
+              onCreate={createDeductionCategory}
+              onUpdate={updateDeductionCategory}
+              onArchive={archiveDeductionCategory}
+              onDelete={deleteDeductionCategory}
+            />
+          ) : effectiveTab === "overview" ? (
             <OverviewTab
               dispatchers={dispatchers}
               employees={employees}
@@ -765,6 +847,7 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
                 period={period}
                 periodLabel={periodLabel}
                 expenses={expensesForPeriod}
+                expenseCategories={expenseCategories}
                 summary={payrollSummary}
                 breakdown={payrollBreakdown}
               />
@@ -772,6 +855,7 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
           ) : effectiveTab === "expenses" ? (
             <ExpensesTab
               entries={expenseEntries}
+              categories={expenseCategories}
               calendarVersion={calendarVersion}
               currency={currency}
               usdPerPkr={usdPerPkr}
@@ -783,6 +867,7 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
             <FinesTab
               dispatchers={employees}
               entries={fineEntries}
+              categories={deductionCategories}
               calendarVersion={calendarVersion}
               currency={currency}
               usdPerPkr={usdPerPkr}
@@ -803,6 +888,7 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
               fallbackTaxPercent={taxPercent}
               dataVersion={payrollVersion}
               fineEntries={fineEntries}
+              deductionCategories={deductionCategories}
               onGenerateSlip={handleGenerateSlip}
               onSendSlip={handleSendSlip}
               onOpenSettings={() => setActiveTab("settings")}

@@ -74,18 +74,32 @@ export function getFinesBreakdownForDispatcherMonth(
   dispatcherId,
   monthKey,
   allFines,
+  categories = [],
 ) {
   const entries = allFines.filter(
     (f) => f.dispatcherId === dispatcherId && getMonthKey(f.date) === monthKey,
   );
 
+  const byCategory = new Map(
+    categories.map((category) => [
+      category.key,
+      { key: category.key, label: category.label, amount: 0 },
+    ]),
+  );
   const breakdown = { late: 0, violation: 0, other: 0, total: 0, entries };
   for (const entry of entries) {
     const key = breakdown[entry.type] === undefined ? "other" : entry.type;
     breakdown[key] += entry.amount;
     breakdown.total += entry.amount;
+    const category = byCategory.get(entry.type) ?? {
+      key: entry.type,
+      label: entry.typeLabel ?? entry.type,
+      amount: 0,
+    };
+    category.amount += Number(entry.amount) || 0;
+    byCategory.set(entry.type, category);
   }
-  return breakdown;
+  return { ...breakdown, byCategory: [...byCategory.values()] };
 }
 
 function dateKey(date) {

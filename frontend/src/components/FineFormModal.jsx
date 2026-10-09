@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { X, Trash2 } from "lucide-react";
-import { FINE_TYPES } from "../data/fines";
 import { getCalendarWeekForDate } from "../utils/periods";
 
 function todayIso() {
@@ -13,6 +12,7 @@ function todayIso() {
 export default function FineFormModal({
   mode, // "add" | "edit"
   entry,
+  categories = [],
   dispatchers,
   defaultDispatcherId,
   onClose,
@@ -22,7 +22,9 @@ export default function FineFormModal({
   const [dispatcherId, setDispatcherId] = useState(
     entry?.dispatcherId ?? defaultDispatcherId ?? dispatchers[0]?.id ?? "",
   );
-  const [type, setType] = useState(entry?.type ?? "late");
+  const [type, setType] = useState(
+    entry?.type ?? categories.find((category) => category.active)?.key ?? "",
+  );
   const [date, setDate] = useState(entry?.date ?? todayIso());
   const [amount, setAmount] = useState(entry ? String(entry.amount) : "");
   const [reason, setReason] = useState(entry?.reason ?? "");
@@ -31,6 +33,9 @@ export default function FineFormModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const isEdit = mode === "edit";
+  const categoryOptions = categories.filter(
+    (category) => category.active || category.key === entry?.type,
+  );
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -38,6 +43,14 @@ export default function FineFormModal({
 
     if (!dispatcherId) {
       setError("Pick an employee.");
+      return;
+    }
+    if (
+      !categoryOptions.some((category) => category.key === type) ||
+      (!categories.find((category) => category.key === type)?.active &&
+        type !== entry?.type)
+    ) {
+      setError("Choose an active deduction category.");
       return;
     }
     if (!date) {
@@ -121,9 +134,9 @@ export default function FineFormModal({
                 value={type}
                 onChange={(event) => setType(event.target.value)}
               >
-                {Object.entries(FINE_TYPES).map(([key, def]) => (
-                  <option key={key} value={key}>
-                    {def.label}
+                {categoryOptions.map((category) => (
+                  <option key={category.key} value={category.key}>
+                    {category.label}{category.active ? "" : " (archived)"}
                   </option>
                 ))}
               </select>

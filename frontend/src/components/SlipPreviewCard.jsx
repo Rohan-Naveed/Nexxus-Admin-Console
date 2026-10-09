@@ -65,6 +65,7 @@ export default function SlipPreviewCard({
   blockReason = "",
   existingSlip,
   fineEntries = [],
+  deductionCategories = [],
   onGenerate,
   onSendSlip,
 }) {
@@ -72,34 +73,39 @@ export default function SlipPreviewCard({
   const isDispatcher = dispatcher.employeeType === "dispatcher";
   const slipBlockReason = isDispatcher ? blockReason : "";
 
-  // Historical gross for the SELECTED month — not always "now" — pulled
-  // from the weekly sync history (src/data/payrollHistory.js). A brand
-  // new dispatcher, or one who'd already left, correctly comes back with
-  // hasAnyData: false for months outside their active window.
-  // TODO(backend): once salary_slips is a real table, a previously
-  // GENERATED slip's own saved figures should still win over this (see
-  // `existingSlip?.monthlyGrossUsd ??` below) — this only fills the
-  // fields the first time a slip is being put together for that month.
+  // Latest synced gross for the selected month. Saved slips are snapshots,
+  // so a new sync must take precedence in the preview until the slip is
+  // regenerated.
   const grossOnFile = useMemo(
     () => getMonthGrossUsd(dispatcher.id, monthKey),
     [dispatcher.id, monthKey],
   );
 
-  // Late/violation fines default to whatever's on file in the Deductions
-  // database for this dispatcher + month (see src/utils/finesCalc.js), so
-  // the admin doesn't have to retype them — but a generated slip's saved
-  // figures always win, and the fields stay editable either way.
+  // Category totals come from this employee's Deductions log for the selected
+  // month and are snapshotted into the generated slip.
   const finesOnFile = useMemo(
     () =>
-      getFinesBreakdownForDispatcherMonth(dispatcher.id, monthKey, fineEntries),
-    [dispatcher.id, monthKey, fineEntries],
+      getFinesBreakdownForDispatcherMonth(
+        dispatcher.id,
+        monthKey,
+        fineEntries,
+        deductionCategories,
+      ),
+    [dispatcher.id, monthKey, fineEntries, deductionCategories],
   );
 
   const monthlyGrossUsd = Number(
-    existingSlip?.monthlyGrossUsd ?? grossOnFile.total,
+    grossOnFile.hasAnyData
+      ? grossOnFile.total
+      : (existingSlip?.monthlyGrossUsd ?? grossOnFile.total),
   );
-  const lateFine = finesOnFile.late;
-  const violationFine = finesOnFile.violation + finesOnFile.other;
+  const grossChangedSinceGeneration =
+    isDispatcher &&
+    existingSlip &&
+    Math.abs(Number(existingSlip.monthlyGrossUsd) - monthlyGrossUsd) >= 0.005;
+  const deductionsBreakdown = finesOnFile.byCategory.filter(
+    (item) => item.amount > 0,
+  );
   const [advance, setAdvance] = useState(String(existingSlip?.advance ?? 0));
   const [accountAmount, setAccountAmount] = useState(
     String(existingSlip?.accountAmount ?? 0),
@@ -125,8 +131,7 @@ export default function SlipPreviewCard({
         usdPerPkr: usdPerPkr ?? 0,
         taxPercent,
         monthlyGrossUsd,
-        lateFine,
-        violationFine,
+        deductionsBreakdown,
         advance: toNumber(advance),
         accountAmount: toNumber(accountAmount),
         cashAmount: toNumber(cashAmount),
@@ -138,8 +143,7 @@ export default function SlipPreviewCard({
       usdPerPkr,
       taxPercent,
       monthlyGrossUsd,
-      lateFine,
-      violationFine,
+      deductionsBreakdown,
       advance,
       accountAmount,
       cashAmount,
@@ -336,6 +340,15 @@ export default function SlipPreviewCard({
             </div>
           )}
 
+          {grossChangedSinceGeneration && (
+            <div className="panel-sub" style={{ marginBottom: 4 }}>
+              Synced gross has changed from $
+              {Number(existingSlip.monthlyGrossUsd).toFixed(2)} to $
+              {monthlyGrossUsd.toFixed(2)} since this slip was generated.
+              Regenerate the slip to update the saved copy.
+            </div>
+          )}
+
           {finesOnFile.entries.length > 0 && (
             <div className="panel-sub" style={{ marginBottom: 4 }}>
               <ShieldAlert
@@ -356,16 +369,14 @@ export default function SlipPreviewCard({
                 value={`$${monthlyGrossUsd.toFixed(2)}`}
               />
             )}
-            <ReadOnlyField
-              id={`late-${dispatcher.id}`}
-              label="Late fine (PKR)"
-              value={fmtMoney(lateFine, "PKR")}
-            />
-            <ReadOnlyField
-              id={`violation-${dispatcher.id}`}
-              label="Violation / other fine (PKR)"
-              value={fmtMoney(violationFine, "PKR")}
-            />
+            {deductionsBreakdown.map((item) => (
+              <ReadOnlyField
+                key={`${dispatcher.id}-${item.key}`}
+                id={`deduction-${dispatcher.id}-${item.key}`}
+                label={`${item.label} (PKR)`}
+                value={fmtMoney(item.amount, "PKR")}
+              />
+            ))}
             <NumberField
               id={`advance-${dispatcher.id}`}
               label="Advance (PKR)"
@@ -447,14 +458,16 @@ export default function SlipPreviewCard({
 
             <div className="slip-summary-box">
               <div className="slip-summary-box-title">Deductions</div>
-              <div className="slip-line">
-                <span>Late / Fine</span>
-                <span>{fmtMoney(preview.lateFine, "PKR")}</span>
-              </div>
-              <div className="slip-line">
-                <span>Violation / Fine</span>
-                <span>{fmtMoney(preview.violationFine, "PKR")}</span>
-              </div>
+              {preview.deductionsBreakdown.length === 0 ? (
+                <div className="panel-sub">No logged deductions this month.</div>
+              ) : (
+                preview.deductionsBreakdown.map((item) => (
+                  <div className="slip-line" key={item.key}>
+                    <span>{item.label}</span>
+                    <span>{fmtMoney(item.amount, "PKR")}</span>
+                  </div>
+                ))
+              )}
               <div className="slip-line">
                 <span>Advance</span>
                 <span>{fmtMoney(preview.advance, "PKR")}</span>

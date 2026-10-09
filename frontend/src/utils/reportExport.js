@@ -34,6 +34,7 @@ export function buildReportCsv(report) {
   lines.push(csvRow(["Metric", "Amount"]));
   lines.push(csvRow(["Total Gross (USD)", usd(report.grossUsd)]));
   lines.push(csvRow(["Tracking Income (PKR)", pkr(report.trackingFees)]));
+  lines.push(csvRow(["Total Salary Earned (PKR)", pkr(report.salaryEarned)]));
   lines.push(csvRow(["Net Payroll Paid (PKR)", pkr(report.payroll)]));
   lines.push(csvRow(["Total Expenses (PKR)", pkr(report.expenses)]));
   lines.push(csvRow(["Payroll Deductions (PKR)", pkr(report.deductions)]));
@@ -60,6 +61,7 @@ export function buildReportCsv(report) {
         "Commission",
         "Tracking Income",
         "Fuel Allowance",
+        "Salary Earned",
         "Deductions",
         "Advance",
         "Tax",
@@ -76,6 +78,7 @@ export function buildReportCsv(report) {
         usd(row.commissionUsd),
         pkr(row.trackingFee),
         pkr(row.fuelAllowance),
+        pkr(row.salary),
         pkr(row.deductions),
         pkr(row.advance),
         pkr(row.tax),
@@ -90,6 +93,7 @@ export function buildReportCsv(report) {
       csvRow([
         "Employee",
         "Base Salary",
+        "Salary Earned",
         "Deductions",
         "Advance",
         "Tax",
@@ -101,6 +105,7 @@ export function buildReportCsv(report) {
         csvRow([
           row.dispatcherName,
           pkr(row.baseSalary),
+          pkr(row.salary),
           pkr(row.deductions),
           pkr(row.advance),
           pkr(row.tax),
@@ -120,6 +125,7 @@ export function buildReportCsv(report) {
         "Period",
         "Gross",
         "Tracking Income",
+        "Salary Earned",
         "Net Payroll Paid",
         "Expenses",
         "Deductions",
@@ -137,6 +143,7 @@ export function buildReportCsv(report) {
         periodLabel,
         usd(row.grossUsd),
         pkr(row.trackingFees),
+        pkr(row.salaryEarned),
         pkr(row.payroll),
         pkr(row.expenses),
         pkr(row.deductions),
@@ -159,7 +166,12 @@ export function buildReportCsv(report) {
   Object.entries(report.expenseCategories ?? {}).forEach(
     ([category, amount]) => {
       lines.push(
-        csvRow([EXPENSE_CATEGORIES[category]?.label ?? category, pkr(amount)]),
+        csvRow([
+          report.expenseCategoryLabels?.[category] ??
+            EXPENSE_CATEGORIES[category]?.label ??
+            category,
+          pkr(amount),
+        ]),
       );
     },
   );

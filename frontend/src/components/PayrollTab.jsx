@@ -1,5 +1,5 @@
+import { Fragment } from "react";
 import { fmtMoney } from "../utils/formatters";
-import { EXPENSE_CATEGORIES } from "../data/expenses";
 
 export default function PayrollTab({
   payrollRows,
@@ -8,6 +8,7 @@ export default function PayrollTab({
   period,
   periodLabel,
   expenses,
+  expenseCategories,
   summary,
   breakdown,
 }) {
@@ -17,12 +18,19 @@ export default function PayrollTab({
     (row) => row.reached && row.partial,
   );
 
-  const expenseRows = [
-    { key: "miscellaneous", amount: expenses.miscellaneous, applies: true },
-    { key: "dinner", amount: expenses.dinner, applies: !isWeekly },
-    { key: "electricity", amount: expenses.electricity, applies: !isWeekly },
-    { key: "gas", amount: expenses.gas, applies: !isWeekly },
-    { key: "water", amount: expenses.water, applies: !isWeekly },
+  const expenseRows = expenseCategories
+    .filter(
+      (category) =>
+        category.active || (expenses.byCategory?.[category.key] ?? 0) > 0,
+    )
+    .map((category) => ({
+      key: category.key,
+      label: category.label,
+      amount: expenses.byCategory?.[category.key] ?? 0,
+    }));
+  const orderedPayrollRows = [
+    ...payrollRows.filter((row) => row.employeeType === "dispatcher"),
+    ...payrollRows.filter((row) => row.employeeType !== "dispatcher"),
   ];
 
   return (
@@ -38,27 +46,26 @@ export default function PayrollTab({
               <div className="panel-title">Expenses · {periodLabel}</div>
               <div className="panel-sub">
                 {isWeekly
-                  ? "Dinner and utility bills are entered monthly, so only miscellaneous counts this week."
-                  : "All expense categories for this period."}
+                  ? "Expenses are recorded monthly and are not allocated across individual weeks."
+                  : "Monthly totals across the configured expense categories."}
               </div>
             </div>
           </div>
           <div className="stack-list">
-            {expenseRows.map(({ key, amount, applies }) => (
+            {expenseRows.map(({ key, label, amount }) => (
               <div
                 className="list-card list-card-compact expense-row"
                 key={key}
               >
-                <span className="list-card-title">
-                  {EXPENSE_CATEGORIES[key].label}
-                </span>
-                <span className={`pill ${applies ? "" : "pill-muted"}`}>
-                  {applies
-                    ? fmtMoney(amount, currency, usdPerPkr)
-                    : "Not counted this period"}
+                <span className="list-card-title">{label}</span>
+                <span className={`pill ${isWeekly ? "pill-muted" : ""}`}>
+                  {isWeekly ? "Not allocated weekly" : fmtMoney(amount, currency, usdPerPkr)}
                 </span>
               </div>
             ))}
+            {expenseRows.length === 0 && (
+              <div className="empty-row">No expense categories yet.</div>
+            )}
           </div>
           <div
             className={`profit-banner ${profitPositive ? "" : "profit-banner-negative"}`}
@@ -100,39 +107,51 @@ export default function PayrollTab({
                 </tr>
               </thead>
               <tbody>
-                {payrollRows.map((row) => (
-                  <tr key={row.id}>
-                    <td className="table-cell table-cell-strong">
-                      {row.dispatcher}
-                    </td>
-                    <td className="table-cell">
-                      {row.employeeType === "dispatcher"
-                        ? fmtMoney(row.gross, currency, usdPerPkr)
-                        : "—"}
-                    </td>
-                    <td className="table-cell">
-                      {fmtMoney(row.baseSalary, currency, usdPerPkr)}
-                    </td>
-                    <td className="table-cell">
-                      {row.employeeType === "dispatcher"
-                        ? fmtMoney(row.commission, currency, usdPerPkr)
-                        : "—"}
-                    </td>
-                    <td className="table-cell table-cell-strong">
-                      {fmtMoney(row.total, currency, usdPerPkr)}
-                    </td>
-                    <td className="table-cell">
-                      {fmtMoney(row.deductions, currency, usdPerPkr)}
-                    </td>
-                    <td className="table-cell table-cell-strong">
-                      {fmtMoney(row.netPayout, currency, usdPerPkr)}
-                    </td>
-                    <td className="table-cell">
-                      {row.employeeType === "dispatcher"
-                        ? fmtMoney(row.trackingFee, currency, usdPerPkr)
-                        : "—"}
-                    </td>
-                  </tr>
+                {orderedPayrollRows.map((row, index) => (
+                  <Fragment key={row.id}>
+                    {index > 0 &&
+                      row.employeeType !== "dispatcher" &&
+                      orderedPayrollRows[index - 1].employeeType ===
+                        "dispatcher" && (
+                        <tr className="payroll-employee-divider">
+                          <td className="table-cell" colSpan={8}>
+                            Fixed-salary employees
+                          </td>
+                        </tr>
+                      )}
+                    <tr>
+                      <td className="table-cell table-cell-strong">
+                        {row.dispatcher}
+                      </td>
+                      <td className="table-cell">
+                        {row.employeeType === "dispatcher"
+                          ? fmtMoney(row.gross, currency, usdPerPkr)
+                          : "—"}
+                      </td>
+                      <td className="table-cell">
+                        {fmtMoney(row.baseSalary, currency, usdPerPkr)}
+                      </td>
+                      <td className="table-cell">
+                        {row.employeeType === "dispatcher"
+                          ? fmtMoney(row.commission, currency, usdPerPkr)
+                          : "—"}
+                      </td>
+                      <td className="table-cell table-cell-strong">
+                        {fmtMoney(row.total, currency, usdPerPkr)}
+                      </td>
+                      <td className="table-cell">
+                        {fmtMoney(row.deductions, currency, usdPerPkr)}
+                      </td>
+                      <td className="table-cell table-cell-strong">
+                        {fmtMoney(row.netPayout, currency, usdPerPkr)}
+                      </td>
+                      <td className="table-cell">
+                        {row.employeeType === "dispatcher"
+                          ? fmtMoney(row.trackingFee, currency, usdPerPkr)
+                          : "—"}
+                      </td>
+                    </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

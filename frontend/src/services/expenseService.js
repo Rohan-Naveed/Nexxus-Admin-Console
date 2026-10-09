@@ -11,6 +11,26 @@ import { apiClient } from "./apiClient";
 
 export function createExpenseService() {
   return {
+    async fetchAllCategories() {
+      return apiClient.get("/expenses/categories");
+    },
+
+    async createCategory(category) {
+      return apiClient.post("/expenses/categories", category);
+    },
+
+    async updateCategory(key, patch) {
+      return apiClient.put(`/expenses/categories/${encodeURIComponent(key)}`, patch);
+    },
+
+    async archiveCategory(key) {
+      return apiClient.delete(`/expenses/categories/${encodeURIComponent(key)}`);
+    },
+
+    async deleteCategory(key) {
+      return apiClient.delete(`/expenses/categories/${encodeURIComponent(key)}/permanent`);
+    },
+
     async fetchAllExpenses() {
       return apiClient.get("/expenses");
     },

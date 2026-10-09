@@ -1,64 +1,31 @@
 const { dbQuery, dbExecute } = require("../../db/helpers");
 const db = require("../../../config/db.json");
 const { ApiError } = require("../../middleware/errorHandler");
-const calendarService = require("../calendar/calendar.service");
 const wc = require("../../utils/weekCalendar");
 
 const queries = db.expenses;
 const categoryQueries = db.expenseCategories;
 
-// Entered ONCE per month by the admin (not per day/week). They belong to a
-// period month (the month a week is labelled with in the Week Calendar) and
-// are stored with expense_date = the end date of that month's last week, so
-// they always fall inside the month. Miscellaneous stays a dated entry.
-const MONTHLY_CATEGORIES = ["dinner", "electricity", "gas", "water"];
-const MONTHLY_LABELS = {
-  dinner: "Dinner",
-  electricity: "Electricity bill",
-  gas: "Gas bill",
-  water: "Water bill",
-};
-const isMonthly = (key) => MONTHLY_CATEGORIES.includes(key);
-
-// Validates "YYYY-MM", makes sure its weeks are set and the month has
-// started, and returns its date span. `date` is what monthly entries get.
-async function resolveMonth(monthKey, now = new Date()) {
+function validateMonth(monthKey) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey || "")) {
     throw new ApiError(400, "month is required in YYYY-MM format.");
   }
-  const { year, month } = wc.parseMonthKey(monthKey);
-  const label = calendarService.monthLabel(year, month);
-  const weeks = await calendarService.getWeeksOfMonth(year, month);
-  if (!weeks.length) {
-    throw new ApiError(
-      400,
-      `No weeks are set for ${label}. Set them in the Week Calendar before recording its expenses.`,
-    );
+  if (monthKey > wc.todayInTimezone().slice(0, 7)) {
+    throw new ApiError(400, "Expenses cannot be recorded for a future month.");
   }
-  const start = weeks.reduce((min, w) => (w.start < min ? w.start : min), weeks[0].start);
-  const end = weeks.reduce((max, w) => (w.end > max ? w.end : max), weeks[0].end);
-  if (start > wc.todayInTimezone(now)) {
-    throw new ApiError(400, `${label} has not started yet.`);
-  }
-  return { year, month, label, start, end, date: end };
-}
-
-async function entriesInSpan(span, category) {
-  const rows = await dbQuery(
-    queries.selectByDateRange,
-    [span.start, span.end],
-    "expenses.selectByDateRange",
-  );
-  return rows.map(toApiShape).filter((e) => e.category === category);
+  return `${monthKey}-01`;
 }
 
 function toApiShape(row) {
   if (!row) return null;
+  const monthKey = String(row.expense_month).slice(0, 7);
   return {
     id: row.id,
     category: row.category_key,
+    categoryLabel: row.category_label || row.category_key,
     amount: Number(row.amount),
-    date: row.expense_date,
+    monthKey,
+    date: `${monthKey}-01`,
     note: row.note || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -68,16 +35,84 @@ function toApiShape(row) {
 }
 
 function toCategoryApiShape(row) {
-  return { key: row.key, label: row.label, cadence: row.cadence };
+  return {
+    key: row.key,
+    label: row.label,
+    active: row.is_active,
+    usageCount: Number(row.usage_count ?? 0),
+  };
 }
 
-async function fetchAllCategories() {
+async function fetchAllCategories(activeOnly = false) {
   const rows = await dbQuery(
-    categoryQueries.selectAll,
+    activeOnly ? categoryQueries.selectActive : categoryQueries.selectAll,
     [],
     "expenseCategories.selectAll",
   );
   return rows.map(toCategoryApiShape);
+}
+
+function categoryKey(label) {
+  const key = String(label || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!key) throw new ApiError(400, "A category name is required.");
+  return key;
+}
+
+async function createCategory(input) {
+  const label = String(input.label || "").trim();
+  if (!label) throw new ApiError(400, "A category name is required.");
+  if (label.length > 80) throw new ApiError(400, "Category names must be 80 characters or fewer.");
+  try {
+    const rows = await dbQuery(
+      categoryQueries.insert,
+      [categoryKey(label), label],
+      "expenseCategories.insert",
+    );
+    return toCategoryApiShape(rows[0]);
+  } catch (err) {
+    if (err.code === "23505") {
+      throw new ApiError(409, "An expense category with this name already exists.");
+    }
+    throw err;
+  }
+}
+
+async function updateCategory(key, input) {
+  const found = await dbQuery(categoryQueries.selectByKey, [key], "expenseCategories.selectByKey");
+  if (!found[0]) throw new ApiError(404, `Expense category ${key} not found.`);
+  const label = input.label === undefined ? found[0].label : String(input.label).trim();
+  if (!label) throw new ApiError(400, "A category name is required.");
+  if (label.length > 80) throw new ApiError(400, "Category names must be 80 characters or fewer.");
+  const active = input.active === undefined ? found[0].is_active : Boolean(input.active);
+  const rows = await dbQuery(categoryQueries.update, [key, label, active], "expenseCategories.update");
+  return toCategoryApiShape(rows[0]);
+}
+
+async function archiveCategory(key) {
+  return updateCategory(key, { active: false });
+}
+
+async function deleteCategory(key) {
+  const found = await dbQuery(categoryQueries.selectByKey, [key], "expenseCategories.selectByKey");
+  if (!found[0]) throw new ApiError(404, `Expense category ${key} not found.`);
+  const usage = await dbQuery(categoryQueries.usageCount, [key], "expenseCategories.usageCount");
+  if (Number(usage[0]?.count ?? 0) > 0) {
+    throw new ApiError(409, "This expense category has linked records. Archive it to preserve history.");
+  }
+  try {
+    const rowCount = await dbExecute(categoryQueries.delete, [key], "expenseCategories.delete");
+    if (rowCount === 0) throw new ApiError(404, `Expense category ${key} not found.`);
+  } catch (err) {
+    if (err.code === "23503") {
+      throw new ApiError(409, "This expense category has linked records. Archive it to preserve history.");
+    }
+    throw err;
+  }
+  return { key, deleted: true };
 }
 
 async function fetchAll() {
@@ -86,9 +121,11 @@ async function fetchAll() {
 }
 
 async function fetchByDateRange(from, to) {
+  validateMonth(from);
+  validateMonth(to);
   const rows = await dbQuery(
     queries.selectByDateRange,
-    [from, to],
+    [`${from}-01`, `${to}-01`],
     "expenses.selectByDateRange",
   );
   return rows.map(toApiShape);
@@ -99,41 +136,29 @@ async function create(input, actor) {
   if (!input.category?.trim()) {
     throw new ApiError(400, "category is required.");
   }
-  if (input.amount === undefined || input.amount === null || Number.isNaN(Number(input.amount))) {
+  if (input.amount === undefined || input.amount === null || input.amount === "" || !Number.isFinite(Number(input.amount))) {
     throw new ApiError(400, "amount is required.");
   }
+  const month = validateMonth(input.monthKey ?? input.month);
+  if (Number(input.amount) < 0) throw new ApiError(400, "amount cannot be negative.");
+  const categoryRows = await dbQuery(categoryQueries.selectByKey, [input.category], "expenseCategories.selectByKey");
+  if (!categoryRows[0]?.is_active) throw new ApiError(400, "Choose an active expense category.");
+  const existing = await dbQuery(queries.selectByMonthCategory, [month, input.category], "expenses.selectByMonthCategory");
+  if (existing.length) throw new ApiError(409, "An amount is already recorded for this category and month. Edit the existing entry instead.");
 
-  let date = input.date;
-  if (isMonthly(input.category)) {
-    // One entry per category per month. 0 is allowed (e.g. no gas bill).
-    if (Number(input.amount) < 0) {
-      throw new ApiError(400, "amount cannot be negative.");
+  try {
+    const rows = await dbQuery(
+      queries.insert,
+      [input.category, input.amount, month, input.note || null, actor ?? null],
+      "expenses.insert",
+    );
+    return toApiShape(rows[0]);
+  } catch (err) {
+    if (err.code === "23505") {
+      throw new ApiError(409, "An amount is already recorded for this category and month.");
     }
-    const span = await resolveMonth(input.month);
-    const existing = await entriesInSpan(span, input.category);
-    if (existing.length > 0) {
-      throw new ApiError(
-        409,
-        `${MONTHLY_LABELS[input.category]} is already entered for ${span.label}. Edit the existing entry instead.`,
-      );
-    }
-    date = span.date;
-  } else {
-    if (Number(input.amount) <= 0) {
-      throw new ApiError(400, "amount must be greater than zero.");
-    }
-    if (!input.date) {
-      throw new ApiError(400, "date is required.");
-    }
-    await calendarService.requireWeekForDate(input.date);
+    throw err;
   }
-
-  const rows = await dbQuery(
-    queries.insert,
-    [input.category, input.amount, date, input.note || null, actor ?? null],
-    "expenses.insert",
-  );
-  return toApiShape(rows[0]);
 }
 
 async function update(id, patch, actor) {
@@ -147,25 +172,19 @@ async function update(id, patch, actor) {
     throw new ApiError(404, `Expense ${id} not found.`);
   }
 
-  let category = patch.category ?? existing.category;
-  let date = patch.date ?? existing.date;
-
-  if (category !== existing.category && (isMonthly(category) || isMonthly(existing.category))) {
-    throw new ApiError(400, "The category of an expense cannot be changed. Delete it and add a new one.");
+  const category = patch.category ?? existing.category;
+  const monthKey = patch.monthKey ?? patch.month ?? existing.monthKey;
+  const month = validateMonth(monthKey);
+  if (patch.amount !== undefined && (patch.amount === "" || !Number.isFinite(Number(patch.amount)) || Number(patch.amount) < 0)) {
+    throw new ApiError(400, "amount cannot be negative.");
   }
-
-  if (isMonthly(existing.category)) {
-    // Month and category are locked; only amount and note can change.
-    category = existing.category;
-    date = existing.date;
-    if (patch.amount !== undefined && Number(patch.amount) < 0) {
-      throw new ApiError(400, "amount cannot be negative.");
-    }
-  } else {
-    if (patch.amount !== undefined && Number(patch.amount) <= 0) {
-      throw new ApiError(400, "amount must be greater than zero.");
-    }
-    await calendarService.requireWeekForDate(date);
+  const categoryRows = await dbQuery(categoryQueries.selectByKey, [category], "expenseCategories.selectByKey");
+  if (!categoryRows[0] || (!categoryRows[0].is_active && category !== existing.category)) {
+    throw new ApiError(400, "Choose an active expense category.");
+  }
+  const duplicates = await dbQuery(queries.selectByMonthCategory, [month, category], "expenses.selectByMonthCategory");
+  if (duplicates.some((row) => String(row.id) !== String(id))) {
+    throw new ApiError(409, "An amount is already recorded for this category and month.");
   }
 
   const rows = await dbQuery(
@@ -173,9 +192,9 @@ async function update(id, patch, actor) {
     [
       id,
       category,
-      patch.amount ?? existing.amount,
-      date,
-      patch.note ?? existing.note,
+      patch.amount === undefined ? existing.amount : patch.amount,
+      month,
+      patch.note === undefined ? existing.note : patch.note || null,
       actor ?? null,
     ],
     "expenses.updateReturning",
@@ -192,9 +211,11 @@ async function remove(id) {
 }
 
 module.exports = {
-  MONTHLY_CATEGORIES,
-  MONTHLY_LABELS,
   fetchAllCategories,
+  createCategory,
+  updateCategory,
+  archiveCategory,
+  deleteCategory,
   fetchAll,
   fetchByDateRange,
   create,

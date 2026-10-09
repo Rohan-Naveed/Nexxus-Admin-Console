@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { Wallet, UtensilsCrossed, Receipt, CalendarRange } from "lucide-react";
+import { Wallet, Receipt, CalendarRange } from "lucide-react";
 import { fmtMoney } from "../utils/formatters";
 import {
-  getMonthKey,
+  getCalendarMonthKey,
   getAllMonthKeys,
   summarizeMonth,
 } from "../utils/expenseCalc";
@@ -12,6 +12,7 @@ import ExpenseFormModal from "./ExpenseFormModal";
 
 export default function ExpensesTab({
   entries,
+  categories,
   calendarVersion,
   currency,
   usdPerPkr,
@@ -21,10 +22,10 @@ export default function ExpensesTab({
 }) {
   const [expandedMonths, setExpandedMonths] = useState(() => new Set());
   const [formState, setFormState] = useState(null);
-  // formState shape: { mode: "add" | "edit", entry?, defaultCategory?, defaultMonth? }
+  const activeCategories = categories.filter((category) => category.active);
 
   const currentMonthKey = useMemo(
-    () => getMonthKey(new Date()),
+    () => getCalendarMonthKey(new Date()),
     [calendarVersion],
   );
 
@@ -92,19 +93,9 @@ export default function ExpensesTab({
           icon={Wallet}
         />
         <KPICard
-          label="Miscellaneous"
-          value={fmtMoney(currentSummary.weeklyTotal, currency, usdPerPkr)}
-          sub="This month so far"
-          icon={UtensilsCrossed}
-        />
-        <KPICard
-          label="Monthly expenses"
-          value={fmtMoney(currentSummary.billsTotal, currency, usdPerPkr)}
-          sub={
-            currentSummary.missingMonthly.length === 0
-              ? "Dinner, electricity, gas, water"
-              : `${currentSummary.missingMonthly.length} of 4 not entered yet`
-          }
+          label="Categories used"
+          value={String(currentSummary.entries.length)}
+          sub={`${activeCategories.length} active categories`}
           icon={Receipt}
         />
         <KPICard
@@ -117,21 +108,27 @@ export default function ExpensesTab({
 
       <MonthExpenseCard
         summary={currentSummary}
+        categories={categories}
         currency={currency}
         usdPerPkr={usdPerPkr}
         isCurrent
         onEdit={openEditForm}
         onAdd={openAddForm}
       />
+      {activeCategories.length === 0 && (
+        <div className="empty-row">
+          Add an active expense category under Properties before recording
+          monthly expenses.
+        </div>
+      )}
 
       <div className="panel">
         <div className="section-head">
           <div>
             <div className="panel-title">History</div>
             <div className="panel-sub">
-              Previous months are closed out automatically once a new month
-              starts. Expand a month to see its miscellaneous entries, monthly
-              dinner and monthly bills.
+              Expand a month to see the amount recorded for each expense
+              category. Each category has one total per month.
             </div>
           </div>
         </div>
@@ -144,6 +141,7 @@ export default function ExpensesTab({
               <MonthExpenseCard
                 key={summary.monthKey}
                 summary={summary}
+                categories={categories}
                 currency={currency}
                 usdPerPkr={usdPerPkr}
                 isCurrent={false}
@@ -164,6 +162,7 @@ export default function ExpensesTab({
           defaultCategory={formState.defaultCategory}
           defaultMonth={formState.defaultMonth}
           entries={entries}
+          categories={categories}
           onClose={closeForm}
           onSubmit={handleSubmit}
           onDelete={handleDelete}

@@ -1,4 +1,5 @@
-// Fine type metadata used by forms and deduction calculations.
+// Default labels retained for backwards compatibility with older frontend
+// data; active deduction categories are loaded from the backend.
 
 export const FINE_TYPES = {
   late: { label: "Late", pill: "" },

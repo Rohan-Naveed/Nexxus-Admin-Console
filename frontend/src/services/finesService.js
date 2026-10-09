@@ -11,6 +11,26 @@ import { apiClient } from "./apiClient";
 
 export function createFinesService() {
   return {
+    async fetchAllCategories() {
+      return apiClient.get("/fines/types");
+    },
+
+    async createCategory(category) {
+      return apiClient.post("/fines/types", category);
+    },
+
+    async updateCategory(key, patch) {
+      return apiClient.put(`/fines/types/${encodeURIComponent(key)}`, patch);
+    },
+
+    async archiveCategory(key) {
+      return apiClient.delete(`/fines/types/${encodeURIComponent(key)}`);
+    },
+
+    async deleteCategory(key) {
+      return apiClient.delete(`/fines/types/${encodeURIComponent(key)}/permanent`);
+    },
+
     async fetchAllFines() {
       return apiClient.get("/fines");
     },

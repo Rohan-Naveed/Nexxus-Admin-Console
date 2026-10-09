@@ -44,25 +44,37 @@
     "upsertTracking": "INSERT INTO properties (property_key, numeric_value, updated_by) VALUES ('gross_percentage', $1, $3), ('tracking_percentage', $2, $3) ON CONFLICT (property_key) DO UPDATE SET numeric_value = EXCLUDED.numeric_value, updated_by = EXCLUDED.updated_by, updated_at = now() RETURNING property_key, numeric_value, updated_at, updated_by"
   },
   "expenseCategories": {
-    "selectAll": "SELECT * FROM expense_categories ORDER BY label ASC"
+    "selectAll": "SELECT c.*, COUNT(e.id)::int AS usage_count FROM expense_categories c LEFT JOIN expenses e ON e.category_key = c.key GROUP BY c.key ORDER BY c.label ASC",
+    "selectActive": "SELECT * FROM expense_categories WHERE is_active = TRUE ORDER BY label ASC",
+    "selectByKey": "SELECT * FROM expense_categories WHERE key = $1",
+    "insert": "INSERT INTO expense_categories (key, label, cadence) VALUES ($1, $2, 'monthly') RETURNING *",
+    "update": "UPDATE expense_categories SET label = $2, is_active = $3 WHERE key = $1 RETURNING *",
+    "usageCount": "SELECT COUNT(*)::int AS count FROM expenses WHERE category_key = $1",
+    "delete": "DELETE FROM expense_categories WHERE key = $1"
   },
   "expenses": {
-    "selectAll": "SELECT * FROM expenses ORDER BY expense_date DESC",
-    "selectById": "SELECT * FROM expenses WHERE id = $1",
-    "selectByDateRange": "SELECT * FROM expenses WHERE expense_date BETWEEN $1 AND $2 ORDER BY expense_date DESC",
-    "insert": "INSERT INTO expenses (category_key, amount, expense_date, note, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $5) RETURNING *",
-    "update": "UPDATE expenses SET category_key = $2, amount = $3, expense_date = $4, note = $5, updated_by = $6, updated_at = now() WHERE id = $1",
-    "updateReturning": "UPDATE expenses SET category_key = $2, amount = $3, expense_date = $4, note = $5, updated_by = $6, updated_at = now() WHERE id = $1 RETURNING *",
+    "selectAll": "SELECT expenses.*, expense_categories.label AS category_label FROM expenses JOIN expense_categories ON expense_categories.key = expenses.category_key ORDER BY expense_month DESC, category_key ASC",
+    "selectById": "SELECT expenses.*, expense_categories.label AS category_label FROM expenses JOIN expense_categories ON expense_categories.key = expenses.category_key WHERE expenses.id = $1",
+    "selectByDateRange": "SELECT expenses.*, expense_categories.label AS category_label FROM expenses JOIN expense_categories ON expense_categories.key = expenses.category_key WHERE expense_month BETWEEN $1 AND $2 ORDER BY expense_month DESC, category_key ASC",
+    "selectByMonthCategory": "SELECT * FROM expenses WHERE expense_month = $1 AND category_key = $2",
+    "insert": "INSERT INTO expenses (category_key, amount, expense_month, note, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $5) RETURNING *",
+    "updateReturning": "UPDATE expenses SET category_key = $2, amount = $3, expense_month = $4, note = $5, updated_by = $6, updated_at = now() WHERE id = $1 RETURNING *",
     "delete": "DELETE FROM expenses WHERE id = $1",
     "deleteReturning": "DELETE FROM expenses WHERE id = $1 RETURNING *"
   },
   "fineTypes": {
-    "selectAll": "SELECT * FROM fine_types ORDER BY label ASC"
+    "selectAll": "SELECT t.*, (SELECT COUNT(*)::int FROM fines f WHERE f.type_key = t.key) AS usage_count FROM fine_types t ORDER BY t.label ASC",
+    "selectActive": "SELECT * FROM fine_types WHERE is_active = TRUE ORDER BY label ASC",
+    "selectByKey": "SELECT * FROM fine_types WHERE key = $1",
+    "insert": "INSERT INTO fine_types (key, label) VALUES ($1, $2) RETURNING *",
+    "update": "UPDATE fine_types SET label = $2, is_active = $3 WHERE key = $1 RETURNING *",
+    "usageCount": "SELECT COUNT(*)::int AS count FROM fines WHERE type_key = $1",
+    "delete": "DELETE FROM fine_types WHERE key = $1"
   },
   "fines": {
-    "selectAll": "SELECT * FROM fines ORDER BY fine_date DESC",
-    "selectById": "SELECT * FROM fines WHERE id = $1",
-    "selectByDispatcher": "SELECT * FROM fines WHERE dispatcher_id = $1 ORDER BY fine_date DESC",
+    "selectAll": "SELECT fines.*, fine_types.label AS type_label FROM fines JOIN fine_types ON fine_types.key = fines.type_key ORDER BY fine_date DESC",
+    "selectById": "SELECT fines.*, fine_types.label AS type_label FROM fines JOIN fine_types ON fine_types.key = fines.type_key WHERE fines.id = $1",
+    "selectByDispatcher": "SELECT fines.*, fine_types.label AS type_label FROM fines JOIN fine_types ON fine_types.key = fines.type_key WHERE dispatcher_id = $1 ORDER BY fine_date DESC",
     "insert": "INSERT INTO fines (dispatcher_id, type_key, amount, fine_date, reason, note, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING *",
     "update": "UPDATE fines SET dispatcher_id = $2, type_key = $3, amount = $4, fine_date = $5, reason = $6, note = $7, updated_by = $8, updated_at = now() WHERE id = $1",
     "updateReturning": "UPDATE fines SET dispatcher_id = $2, type_key = $3, amount = $4, fine_date = $5, reason = $6, note = $7, updated_by = $8, updated_at = now() WHERE id = $1 RETURNING *",
@@ -82,7 +94,7 @@
     "insertGeneratedHistory": "INSERT INTO salary_slip_history (salary_slip_id, dispatcher_id, dispatcher_name, dispatch_alias, period_year, period_month, event_type, actor) VALUES ($1, $2, $3, $4, $5, $6, 'generated', $7) RETURNING *",
     "insertEmailSentHistory": "INSERT INTO salary_slip_history (salary_slip_id, dispatcher_id, dispatcher_name, dispatch_alias, period_year, period_month, event_type, actor, email) VALUES ($1, $2, $3, $4, $5, $6, 'email_sent', $7, $8) RETURNING *",
     "markEmailFailed": "UPDATE salary_slips SET email_status = 'failed', email_last_error = $2 WHERE id = $1 RETURNING *",
-    "upsert": "INSERT INTO salary_slips (dispatcher_id, period_year, period_month, dispatcher_name, dispatch_alias, designation, cnic, account_number, email, usd_per_pkr, tax_percent, monthly_gross_usd, commission_percent, commission_usd, amount_in_pkr, basic_salary, fuel_allowance, total_earnings, late_fine, violation_fine, advance, income_tax, total_deductions, net_pay, cash_amount, account_amount, generated_by, employee_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) ON CONFLICT (dispatcher_id, period_year, period_month) DO UPDATE SET dispatcher_name = EXCLUDED.dispatcher_name, dispatch_alias = EXCLUDED.dispatch_alias, employee_type = EXCLUDED.employee_type, designation = EXCLUDED.designation, cnic = EXCLUDED.cnic, account_number = EXCLUDED.account_number, email = EXCLUDED.email, usd_per_pkr = EXCLUDED.usd_per_pkr, tax_percent = EXCLUDED.tax_percent, monthly_gross_usd = EXCLUDED.monthly_gross_usd, commission_percent = EXCLUDED.commission_percent, commission_usd = EXCLUDED.commission_usd, amount_in_pkr = EXCLUDED.amount_in_pkr, basic_salary = EXCLUDED.basic_salary, fuel_allowance = EXCLUDED.fuel_allowance, total_earnings = EXCLUDED.total_earnings, late_fine = EXCLUDED.late_fine, violation_fine = EXCLUDED.violation_fine, advance = EXCLUDED.advance, income_tax = EXCLUDED.income_tax, total_deductions = EXCLUDED.total_deductions, net_pay = EXCLUDED.net_pay, cash_amount = EXCLUDED.cash_amount, account_amount = EXCLUDED.account_amount, generated_by = EXCLUDED.generated_by, generated_at = now(), updated_at = now() RETURNING *",
+    "upsert": "INSERT INTO salary_slips (dispatcher_id, period_year, period_month, dispatcher_name, dispatch_alias, designation, cnic, account_number, email, usd_per_pkr, tax_percent, monthly_gross_usd, commission_percent, commission_usd, amount_in_pkr, basic_salary, fuel_allowance, total_earnings, late_fine, violation_fine, advance, income_tax, total_deductions, net_pay, cash_amount, account_amount, generated_by, employee_type, deductions_breakdown) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29::jsonb) ON CONFLICT (dispatcher_id, period_year, period_month) DO UPDATE SET dispatcher_name = EXCLUDED.dispatcher_name, dispatch_alias = EXCLUDED.dispatch_alias, employee_type = EXCLUDED.employee_type, designation = EXCLUDED.designation, cnic = EXCLUDED.cnic, account_number = EXCLUDED.account_number, email = EXCLUDED.email, usd_per_pkr = EXCLUDED.usd_per_pkr, tax_percent = EXCLUDED.tax_percent, monthly_gross_usd = EXCLUDED.monthly_gross_usd, commission_percent = EXCLUDED.commission_percent, commission_usd = EXCLUDED.commission_usd, amount_in_pkr = EXCLUDED.amount_in_pkr, basic_salary = EXCLUDED.basic_salary, fuel_allowance = EXCLUDED.fuel_allowance, total_earnings = EXCLUDED.total_earnings, late_fine = EXCLUDED.late_fine, violation_fine = EXCLUDED.violation_fine, advance = EXCLUDED.advance, income_tax = EXCLUDED.income_tax, total_deductions = EXCLUDED.total_deductions, net_pay = EXCLUDED.net_pay, cash_amount = EXCLUDED.cash_amount, account_amount = EXCLUDED.account_amount, generated_by = EXCLUDED.generated_by, generated_at = now(), updated_at = now(), deductions_breakdown = EXCLUDED.deductions_breakdown RETURNING *",
     "delete": "DELETE FROM salary_slips WHERE id = $1"
   },
   "syncHistory": {

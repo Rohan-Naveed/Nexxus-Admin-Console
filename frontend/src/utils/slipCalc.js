@@ -46,6 +46,7 @@ export function computeSlipPreview({
   monthlyGrossUsd,
   lateFine = 0,
   violationFine = 0,
+  deductionsBreakdown,
   advance = 0,
   accountAmount = 0,
   cashAmount = 0,
@@ -61,13 +62,43 @@ export function computeSlipPreview({
   const fuelAllowance = dispatcher.fuelAllowance?.Monthly ?? 0;
   const totalEarnings = amountInPkr + basicSalary + fuelAllowance;
 
-  const late = Number(lateFine) || 0;
-  const violation = Number(violationFine) || 0;
+  const deductionItems = Array.isArray(deductionsBreakdown)
+    ? deductionsBreakdown
+        .filter((item) => Number(item.amount) > 0)
+        .map((item) => ({
+          key: item.key,
+          label: item.label || item.key,
+          amount: Number(item.amount) || 0,
+        }))
+    : [
+        ...(Number(lateFine) > 0
+          ? [{ key: "late", label: "Late", amount: Number(lateFine) }]
+          : []),
+        ...(Number(violationFine) > 0
+          ? [
+              {
+                key: "violation",
+                label: "Violation / other",
+                amount: Number(violationFine),
+              },
+            ]
+          : []),
+      ];
+  const late = deductionItems
+    .filter((item) => item.key === "late")
+    .reduce((sum, item) => sum + item.amount, 0);
+  const violation = deductionItems
+    .filter((item) => item.key !== "late")
+    .reduce((sum, item) => sum + item.amount, 0);
+  const loggedDeductions = deductionItems.reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
   const adv = Number(advance) || 0;
   const enteredAccount = Number(accountAmount) || 0;
   const enteredCash = Number(cashAmount) || 0;
   const taxRate = (Number(taxPercent) || 0) / 100;
-  const earningsAfterOtherDeductions = totalEarnings - late - violation - adv;
+  const earningsAfterOtherDeductions = totalEarnings - loggedDeductions - adv;
 
   let account = enteredAccount;
   let incomeTax;
@@ -88,7 +119,7 @@ export function computeSlipPreview({
   } else {
     incomeTax = Number((Math.max(0, account) * taxRate).toFixed(2));
   }
-  const totalDeductions = late + violation + adv + incomeTax;
+  const totalDeductions = loggedDeductions + adv + incomeTax;
 
   const netPay = totalEarnings - totalDeductions;
   if (payoutMode !== "cash") cash = netPay - account;
@@ -107,6 +138,7 @@ export function computeSlipPreview({
     totalEarnings,
     lateFine: late,
     violationFine: violation,
+    deductionsBreakdown: deductionItems,
     advance: adv,
     incomeTax,
     totalDeductions,

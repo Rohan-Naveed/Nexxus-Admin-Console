@@ -43,6 +43,7 @@ function toApiShape(row) {
     totalEarnings: Number(row.total_earnings),
     lateFine: Number(row.late_fine),
     violationFine: Number(row.violation_fine),
+    deductionsBreakdown: row.deductions_breakdown || [],
     advance: Number(row.advance),
     incomeTax: Number(row.income_tax),
     totalDeductions: Number(row.total_deductions),
@@ -176,6 +177,24 @@ async function generate(slip, actor) {
     slip.accountAmount,
     actor ?? null,
     slip.employeeType === "employee" ? "employee" : "dispatcher",
+    JSON.stringify(
+      Array.isArray(slip.deductionsBreakdown)
+        ? slip.deductionsBreakdown
+        : [
+            ...(Number(slip.lateFine) > 0
+              ? [{ key: "late", label: "Late", amount: Number(slip.lateFine) }]
+              : []),
+            ...(Number(slip.violationFine) > 0
+              ? [
+                  {
+                    key: "violation",
+                    label: "Violation / other",
+                    amount: Number(slip.violationFine),
+                  },
+                ]
+              : []),
+          ],
+    ),
   ];
 
   const rows = await dbQuery(queries.upsert, params, "salarySlips.upsert");

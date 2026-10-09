@@ -23,6 +23,7 @@ export default function SalarySlipsTab({
   fallbackTaxPercent,
   dataVersion,
   fineEntries,
+  deductionCategories,
   onGenerateSlip,
   onSendSlip,
   onOpenSettings,
@@ -116,6 +117,7 @@ export default function SalarySlipsTab({
               blockReason={blockReason}
               existingSlip={slipsForMonth.get(dispatcher.id) ?? null}
               fineEntries={fineEntries}
+              deductionCategories={deductionCategories}
               onGenerate={onGenerateSlip}
               onSendSlip={onSendSlip}
             />

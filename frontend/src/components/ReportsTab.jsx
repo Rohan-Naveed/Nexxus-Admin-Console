@@ -46,6 +46,7 @@ function EmployeeBreakdownTable({
   title,
   rows,
   fixedSalary = false,
+  separatorBefore = false,
   currency,
   usdPerPkr,
 }) {
@@ -55,6 +56,7 @@ function EmployeeBreakdownTable({
     ? [
         "Employee",
         "Base salary",
+        "Salary earned",
         "Deductions",
         "Advance",
         "Tax",
@@ -67,6 +69,7 @@ function EmployeeBreakdownTable({
         `Commission ${currency}`,
         "Tracking income",
         "Fuel",
+        "Salary earned",
         "Deductions",
         "Advance",
         "Tax",
@@ -74,7 +77,9 @@ function EmployeeBreakdownTable({
       ];
 
   return (
-    <div className="content-stack">
+    <div
+      className={`content-stack ${separatorBefore ? "breakdown-section-separated" : ""}`}
+    >
       <div className="panel-title">{title}</div>
       <div className="table-shell">
         <table>
@@ -101,6 +106,9 @@ function EmployeeBreakdownTable({
                   <>
                     <td className="table-cell">
                       {fmtMoney(row.baseSalary, currency, usdPerPkr)}
+                    </td>
+                    <td className="table-cell table-cell-strong">
+                      {fmtMoney(row.salary, currency, usdPerPkr)}
                     </td>
                     <td className="table-cell">
                       {fmtMoney(row.deductions, currency, usdPerPkr)}
@@ -142,6 +150,9 @@ function EmployeeBreakdownTable({
                     <td className="table-cell">
                       {fmtMoney(row.fuelAllowance, currency, usdPerPkr)}
                     </td>
+                    <td className="table-cell table-cell-strong">
+                      {fmtMoney(row.salary, currency, usdPerPkr)}
+                    </td>
                     <td className="table-cell">
                       {fmtMoney(row.deductions, currency, usdPerPkr)}
                     </td>
@@ -166,8 +177,16 @@ function EmployeeBreakdownTable({
 }
 
 function ExpenseBreakdown({ report, currency, usdPerPkr }) {
-  const categories = Object.entries(EXPENSE_CATEGORIES);
   if (!report.expenseCategories) return null;
+  const categories = Object.keys(report.expenseCategories).map((key) => [
+    key,
+    {
+      label:
+        report.expenseCategoryLabels?.[key] ??
+        EXPENSE_CATEGORIES[key]?.label ??
+        key,
+    },
+  ]);
 
   return (
     <div className="panel">
@@ -180,7 +199,7 @@ function ExpenseBreakdown({ report, currency, usdPerPkr }) {
             · {report.label}
           </div>
           <div className="panel-sub">
-            Dinner and utility bills are shown separately from other expenses.
+            Monthly totals grouped by expense category.
           </div>
         </div>
       </div>
@@ -425,9 +444,9 @@ export default function ReportsTab({
               icon={Wallet}
             />
             <KPICard
-              label={`Net payroll paid \u00b7 ${report.label}`}
-              value={fmtMoney(report.payroll, currency, usdPerPkr)}
-              sub="Net payroll paid after recorded deductions, advances and tax"
+              label={`Total salary earned \u00b7 ${report.label}`}
+              value={fmtMoney(report.salaryEarned, currency, usdPerPkr)}
+              sub="Employee earnings before deductions, advances and tax"
               icon={Wallet}
             />
             <KPICard
@@ -443,7 +462,7 @@ export default function ReportsTab({
             <KPICard
               label={`Net Profit \u00b7 ${report.label}`}
               value={fmtMoney(report.profit, currency, usdPerPkr)}
-              sub="Gross + tracking income − net payroll paid − expenses"
+              sub="Gross + tracking income − salary earned − expenses"
               icon={PiggyBank}
             />
             <KPICard
@@ -465,9 +484,9 @@ export default function ReportsTab({
                   Payroll breakdown — {report.label}
                 </div>
                 <div className="panel-sub">
-                  Payroll shows the amount paid after recorded deductions,
-                  advances and tax. The Advance column uses generated salary
-                  slips.
+                  Salary earned is before deductions, advances and tax. Net pay
+                  shows the amount paid after those deductions. The Advance
+                  column uses generated salary slips.
                 </div>
               </div>
               <div className="pill-row" style={{ gap: 8 }}>
@@ -509,6 +528,9 @@ export default function ReportsTab({
                 (row) => row.employeeType === "employee",
               )}
               fixedSalary
+              separatorBefore={report.rows.some(
+                (row) => row.employeeType !== "employee",
+              )}
               currency={currency}
               usdPerPkr={usdPerPkr}
             />
@@ -545,7 +567,7 @@ export default function ReportsTab({
                         "Week",
                         `Gross ${currency}`,
                         "Tracking income",
-                        "Payroll",
+                        "Salary earned",
                         "Expenses",
                         "Deductions",
                       ].map((header) => (
@@ -605,11 +627,10 @@ export default function ReportsTab({
 
               {report.billsTotal > 0 && (
                 <div className="breakdown-note">
-                  Office bills (electricity, gas, water) of{" "}
+                  Monthly expense totals of{" "}
                   {fmtMoney(report.billsTotal, currency, usdPerPkr)} are entered
-                  once a month, not per week, so they're included in the
-                  Expenses total above but not split into the weekly figures
-                  here.
+                  once per category, so they are included in the Expenses total
+                  above but are not allocated to individual weeks here.
                 </div>
               )}
             </div>
@@ -635,6 +656,7 @@ export default function ReportsTab({
                         "Month",
                         "Gross",
                         "Tracking income",
+                        "Salary earned",
                         "Net payroll paid",
                         "Expenses",
                         "Deductions",
@@ -666,6 +688,13 @@ export default function ReportsTab({
                               )}
                             </td>
                             <td className="table-cell">
+                              {fmtMoney(
+                                month.salaryEarned,
+                                currency,
+                                usdPerPkr,
+                              )}
+                            </td>
+                            <td className="table-cell">
                               {fmtMoney(month.payroll, currency, usdPerPkr)}
                             </td>
                             <td className="table-cell">
@@ -684,7 +713,7 @@ export default function ReportsTab({
                         ) : (
                           <td
                             className="table-cell"
-                            colSpan={7}
+                            colSpan={8}
                             style={{ opacity: 0.6 }}
                           >
                             No synced data

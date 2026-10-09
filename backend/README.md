@@ -104,10 +104,11 @@ then:
 For a fresh database, run the root `schema.sql`; it includes the latest
 dispatcher, payroll, sync, calendar, and salary-slip structures. For an
 existing database, apply any outstanding migrations in numeric order through
-`migrations/008_salary_slip_history.sql`. That migration adds the append-only
-salary-slip activity log and backfills the latest generation and successful
-email-send events from existing salary slips. Do not run migrations against a
-fresh database created from `schema.sql`.
+`migrations/009_monthly_expenses_and_editable_categories.sql`. This migration
+converts dated expenses into one amount per category and payroll month,
+archives category changes without deleting history, and stores category-level
+deduction snapshots on salary slips. Do not run migrations against a fresh
+database created from `schema.sql`.
 
 Configure the SMTP connection in
 `backend/config/config.json` under `mail.smtp`. The default host, port, and

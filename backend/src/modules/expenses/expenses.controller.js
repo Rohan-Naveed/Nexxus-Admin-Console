@@ -1,7 +1,23 @@
 const service = require("./expenses.service");
 
 async function listCategories(req, res) {
-  res.json(await service.fetchAllCategories());
+  res.json(await service.fetchAllCategories(req.query.activeOnly === "true"));
+}
+
+async function createCategory(req, res) {
+  res.status(201).json(await service.createCategory(req.body));
+}
+
+async function updateCategory(req, res) {
+  res.json(await service.updateCategory(req.params.key, req.body));
+}
+
+async function archiveCategory(req, res) {
+  res.json(await service.archiveCategory(req.params.key));
+}
+
+async function deleteCategory(req, res) {
+  res.json(await service.deleteCategory(req.params.key));
 }
 
 async function listExpenses(req, res) {
@@ -24,4 +40,14 @@ async function deleteExpense(req, res) {
   res.json(await service.remove(req.params.id));
 }
 
-module.exports = { listCategories, listExpenses, createExpense, updateExpense, deleteExpense };
+module.exports = {
+  listCategories,
+  createCategory,
+  updateCategory,
+  archiveCategory,
+  deleteCategory,
+  listExpenses,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+};

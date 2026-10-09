@@ -100,9 +100,12 @@ function trackingFeeUsdForYear(dispatcherId, year) {
 function expenseRows(entries, monthKey) {
   return entries.map((entry) => ({
     monthKey,
-    date: String(entry.date).slice(0, 10),
+    date: `${entry.monthKey ?? String(entry.date).slice(0, 7)}-01`,
     category: entry.category,
-    categoryLabel: EXPENSE_CATEGORIES[entry.category]?.label ?? entry.category,
+    categoryLabel:
+      entry.categoryLabel ??
+      EXPENSE_CATEGORIES[entry.category]?.label ??
+      entry.category,
     note: entry.note || "",
     amount: Number(entry.amount) || 0,
   }));
@@ -126,12 +129,8 @@ function employeeActiveInMonth(employee, monthKey) {
 // dispatcher synced yet (future week, or a month still in progress)
 // comes back with reached: false.
 //
-// Office bills (electricity/gas/water) aren't split into weeks — they're
-// only ever entered once a month — so `expenses` here is dinner +
-// miscellaneous only, same convention as periodBreakdown.js's weekly
-// table. The bills total is returned separately on the report
-// (`billsTotal`) so callers can foot-note it rather than silently
-// losing it from the weekly figures.
+// Expenses are monthly category totals and are intentionally not assigned
+// to individual weeks; the monthly report total includes every category.
 function getMonthlyWeeklyBreakdown(
   monthKey,
   { dispatchers, expenseSummary, fineEntries },
@@ -331,6 +330,7 @@ export function getMonthlyReport(
   let trackingFees = 0;
   let trackingFeesUsd = 0;
   let payroll = 0;
+  let salaryEarned = 0;
   let advances = 0;
   let anySynced = false;
 
@@ -391,8 +391,13 @@ export function getMonthlyReport(
       : base + commission + fuelAllowance;
     if (employeeActive || salary > 0) anySynced = true;
     const savedFines = savedSlip
-      ? (Number(savedSlip.lateFine) || 0) +
-        (Number(savedSlip.violationFine) || 0)
+      ? Array.isArray(savedSlip.deductionsBreakdown)
+        ? savedSlip.deductionsBreakdown.reduce(
+            (sum, item) => sum + (Number(item.amount) || 0),
+            0,
+          )
+        : (Number(savedSlip.lateFine) || 0) +
+          (Number(savedSlip.violationFine) || 0)
       : null;
     const dedAmount =
       savedFines ?? deductionByDispatcher.get(dispatcher.id) ?? 0;
@@ -413,6 +418,7 @@ export function getMonthlyReport(
     trackingFees += dTrackingFee;
     trackingFeesUsd += dTrackingFeeUsd;
     payroll += netPay;
+    salaryEarned += salary;
     advances += advance;
 
     return {
@@ -447,14 +453,21 @@ export function getMonthlyReport(
     trackingFees,
     trackingFeesUsd,
     payroll,
+    salaryEarned,
     expenses: expenses.total,
     expenseCategories: expenses.totals,
+    expenseCategoryLabels: Object.fromEntries(
+      expenses.entries.map((entry) => [
+        entry.category,
+        entry.categoryLabel ?? EXPENSE_CATEGORIES[entry.category]?.label ?? entry.category,
+      ]),
+    ),
     expenseRows: expenseRows(expenses.entries, monthKey),
     billsTotal: expenses.billsTotal,
     deductions: rows.reduce((sum, row) => sum + row.deductions, 0),
     advances,
     tax: rows.reduce((s, r) => s + r.tax, 0),
-    profit: gross + trackingFees - payroll - expenses.total,
+    profit: gross + trackingFees - salaryEarned - expenses.total,
     rows,
     weeklyBreakdown: getMonthlyWeeklyBreakdown(monthKey, {
       dispatchers,
@@ -518,8 +531,11 @@ export function getYearlyReport(
         salarySlips,
       }),
     );
+    const expenseCategoryKeys = new Set(
+      monthlyReports.flatMap((report) => Object.keys(report.expenseCategories)),
+    );
     const expenseCategoryTotals = Object.fromEntries(
-      Object.keys(EXPENSE_CATEGORIES).map((category) => [
+      [...expenseCategoryKeys].map((category) => [
         category,
         monthlyReports.reduce(
           (sum, monthlyReport) =>
@@ -587,8 +603,16 @@ export function getYearlyReport(
         0,
       ),
       payroll: monthlyReports.reduce((s, r) => s + r.payroll, 0),
+      salaryEarned: monthlyReports.reduce(
+        (sum, report) => sum + report.salaryEarned,
+        0,
+      ),
       expenses: monthlyReports.reduce((s, r) => s + r.expenses, 0),
       expenseCategories: expenseCategoryTotals,
+      expenseCategoryLabels: Object.assign(
+        {},
+        ...monthlyReports.map((report) => report.expenseCategoryLabels),
+      ),
       expenseRows: monthlyReports.flatMap((monthlyReport) =>
         monthlyReport.expenseRows.map((row) => ({
           ...row,
@@ -616,6 +640,7 @@ export function getYearlyReport(
         trackingFees: r.trackingFees,
         trackingFeesUsd: r.trackingFeesUsd,
         payroll: r.payroll,
+        salaryEarned: r.salaryEarned,
         expenses: r.expenses,
         expenseCategories: r.expenseCategories,
         deductions: r.deductions,
@@ -656,6 +681,7 @@ export function getYearlyReport(
   const trackingFees = rows.reduce((s, r) => s + r.trackingFee, 0);
   const trackingFeesUsd = rows.reduce((s, r) => s + r.trackingFeeUsd, 0);
   const payroll = rows.reduce((s, r) => s + r.netPay, 0);
+  const salaryEarned = rows.reduce((s, r) => s + r.salary, 0);
 
   return {
     periodType: "Yearly",
@@ -669,15 +695,14 @@ export function getYearlyReport(
     trackingFees,
     trackingFeesUsd,
     payroll,
+    salaryEarned,
     expenses: 0,
-    expenseCategories: Object.fromEntries(
-      Object.keys(EXPENSE_CATEGORIES).map((category) => [category, 0]),
-    ),
+    expenseCategories: {},
     expenseRows: [],
     deductions: 0,
     advances: 0,
     tax: 0,
-    profit: gross + trackingFees - payroll,
+    profit: gross + trackingFees - salaryEarned,
     rows,
     monthsCovered: 0,
     monthlyBreakdown: [],

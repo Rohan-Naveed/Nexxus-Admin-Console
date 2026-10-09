@@ -8,7 +8,6 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { fmtMoney } from "../utils/formatters";
-import { FINE_TYPES } from "../data/fines";
 import {
   getMonthKey,
   getAllFineMonthKeys,
@@ -18,15 +17,16 @@ import {
 import KPICard from "./KPICard";
 import FineFormModal from "./FineFormModal";
 
-function FineRow({ entry, currency, usdPerPkr, onEdit }) {
-  const typeDef = FINE_TYPES[entry.type] ?? FINE_TYPES.other;
+function FineRow({ entry, categories, currency, usdPerPkr, onEdit }) {
+  const label =
+    entry.typeLabel ??
+    categories.find((category) => category.key === entry.type)?.label ??
+    entry.type;
   return (
     <div className="list-card list-card-compact expense-row">
       <div>
         <div className="entry-row-main" style={{ marginBottom: 2 }}>
-          <span className={`pill entry-category-pill ${typeDef.pill}`}>
-            {typeDef.label}
-          </span>
+          <span className="pill entry-category-pill">{label}</span>
           <span className="list-card-title">{entry.reason}</span>
         </div>
         <div className="panel-sub">{getWeekDateLabel(entry.date)}</div>
@@ -49,7 +49,7 @@ function FineRow({ entry, currency, usdPerPkr, onEdit }) {
   );
 }
 
-function DispatcherFineGroup({ group, currency, usdPerPkr, onEdit }) {
+function DispatcherFineGroup({ group, categories, currency, usdPerPkr, onEdit }) {
   return (
     <div className="week-block">
       <div className="week-block-head">
@@ -63,6 +63,7 @@ function DispatcherFineGroup({ group, currency, usdPerPkr, onEdit }) {
           <FineRow
             key={entry.id}
             entry={entry}
+            categories={categories}
             currency={currency}
             usdPerPkr={usdPerPkr}
             onEdit={onEdit}
@@ -82,6 +83,7 @@ function MonthFinesCard({
   onToggleExpand,
   onEdit,
   onAdd,
+  categories,
 }) {
   const isOpen = isCurrent || expanded;
 
@@ -118,6 +120,7 @@ function MonthFinesCard({
             <button
               type="button"
               className="primary-btn"
+              disabled={!categories.some((category) => category.active)}
               onClick={(event) => {
                 event.stopPropagation();
                 onAdd();
@@ -140,6 +143,7 @@ function MonthFinesCard({
                 <DispatcherFineGroup
                   key={group.dispatcherId}
                   group={group}
+                  categories={categories}
                   currency={currency}
                   usdPerPkr={usdPerPkr}
                   onEdit={onEdit}
@@ -156,6 +160,7 @@ function MonthFinesCard({
 export default function FinesTab({
   dispatchers,
   entries,
+  categories,
   calendarVersion,
   currency,
   usdPerPkr,
@@ -270,6 +275,13 @@ export default function FinesTab({
         />
       </div>
 
+      {categories.every((category) => !category.active) && (
+        <div className="empty-row">
+          Add an active deduction category under Properties before recording
+          deductions.
+        </div>
+      )}
+
       <div className="panel panel-compact">
         <div className="section-head">
           <div>
@@ -297,6 +309,7 @@ export default function FinesTab({
 
       <MonthFinesCard
         summary={currentSummary}
+        categories={categories}
         currency={currency}
         usdPerPkr={usdPerPkr}
         isCurrent
@@ -309,10 +322,8 @@ export default function FinesTab({
           <div>
             <div className="panel-title">History</div>
             <div className="panel-sub">
-              Previous months are closed out automatically once a new month
-              starts. Expand a month to see which dispatcher was fined, for
-              starts. Expand a month to see which employee was fined, for what,
-              and on which date — e.g. Week 2 · 11 Aug 2026.
+              Expand a month to see which employee was fined, the deduction
+              category, reason, and date.
             </div>
           </div>
         </div>
@@ -325,6 +336,7 @@ export default function FinesTab({
               <MonthFinesCard
                 key={summary.monthKey}
                 summary={summary}
+                categories={categories}
                 currency={currency}
                 usdPerPkr={usdPerPkr}
                 isCurrent={false}
@@ -342,6 +354,7 @@ export default function FinesTab({
         <FineFormModal
           mode={formState.mode}
           entry={formState.entry}
+          categories={categories}
           dispatchers={dispatchers}
           defaultDispatcherId={formState.defaultDispatcherId}
           onClose={closeForm}

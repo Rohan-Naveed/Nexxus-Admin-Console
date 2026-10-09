@@ -19,6 +19,17 @@ export function buildSalaryReportData(slips, fromMonth, toMonth) {
     const accountAmount = Number(slip.accountAmount) || 0;
     const cashAmount = Number(slip.cashAmount) || 0;
     const taxDeducted = Number(slip.incomeTax) || 0;
+    const netPay =
+      slip.netPay == null
+        ? accountAmount + cashAmount
+        : Number(slip.netPay) || 0;
+    const salaryEarned =
+      slip.totalEarnings == null
+        ? netPay +
+          (slip.totalDeductions == null
+            ? taxDeducted
+            : Number(slip.totalDeductions) || 0)
+        : Number(slip.totalEarnings) || 0;
     const employee = employeeMap.get(employeeId) || {
       dispatcherId: employeeId,
       dispatcherName: slip.dispatcherName,
@@ -35,8 +46,7 @@ export function buildSalaryReportData(slips, fromMonth, toMonth) {
     employee.dispatcherName = slip.dispatcherName || employee.dispatcherName;
     employee.cnic = slip.cnic || employee.cnic;
     employee.designation = slip.designation || employee.designation;
-    employee.totalSalary +=
-      slip.netPay == null ? accountAmount + cashAmount : Number(slip.netPay);
+    employee.totalSalary += salaryEarned;
     employee.salaryInAccount += accountAmount;
     employee.salaryInCash += cashAmount;
     employee.taxDeducted += taxDeducted;

@@ -28,20 +28,19 @@ The three were clearly designed together (the backend's `toApiShape()` functions
 - **Gap:** "Refresh all" button currently has no handler at all.
 
 ### Payroll
-- **Frontend today:** per-dispatcher table (gross, base salary, commission, total, estimated tax, net payout, approval status), a period expense summary + profit banner, and a weekly/monthly/yearly trend breakdown table.
+- **Frontend today:** dispatcher and fixed-salary employee payroll breakdowns, separated in the overview, with total salary earned shown before deductions alongside net payout, a period expense summary + profit banner, and a weekly/monthly/yearly trend breakdown table.
 - **Backend today:** the raw numbers exist (`payroll_weeks` totals, `dispatchers` for rates), but there's no dedicated "payroll" endpoint — this tab's numbers are a **client-side computation** over dispatcher + payroll_weeks + expenses data, same as it is now with mock data.
 - **Wiring needed:** once dispatchers, payroll-weeks totals, and expenses are all coming from real endpoints, `PayrollTab`'s existing calculation logic (`payrollHistoryCalc.js`) needs no rewrite — it just needs real arrays instead of the mock `WEEKLY_GROSS_HISTORY`/`YEARLY_GROSS_HISTORY`.
 - **Gap:** the "Approved / Pending" status per payroll row (`PAYROLL_ROWS` in `data/dispatchers.js`) has no backing table at all — right now it's hardcoded mock data with no CRUD. If real approval tracking is wanted, this needs a small new table (e.g. `payroll_approvals(dispatcher_id, period_year, period_month, status)`) that doesn't exist in `schema.sql` yet.
 
 ### Expenses
-- **Frontend today:** category-based entries (dinner/misc = daily-ish, electricity/gas/water = monthly), month-by-month history with expand/collapse, add/edit/delete.
-- **Backend today:** full CRUD at `/api/expenses`, category lookup at `/api/expenses/categories`, date-range filtering built in.
-- **Wiring needed:** direct 1:1 mapping, no gaps.
+- **Frontend today:** admins manage expense categories under Properties and enter one amount per category and calendar month. Monthly history supports editing and deleting amounts.
+- **Backend today:** expense category CRUD is exposed at `/api/expenses/categories`; archived categories remain attached to their historical records. Expenses are stored once per category/month at `/api/expenses`.
+- **Migration:** `009_monthly_expenses_and_editable_categories.sql` consolidates existing dated entries into monthly totals, using the configured Week Calendar period where possible.
 
 ### Deductions (Fines)
-- **Frontend today:** per-dispatcher fine entries (late/violation/other), dispatcher filter, monthly history.
-- **Backend today:** full CRUD at `/api/fines`, type lookup at `/api/fines/types`, per-dispatcher filtering built in.
-- **Wiring needed:** direct 1:1 mapping, no gaps.
+- **Frontend today:** admins manage deduction categories under Properties; fine entries remain attached to an employee and date, with dispatcher filtering and monthly history.
+- **Backend today:** category CRUD is exposed at `/api/fines/types`; categories can be archived without deleting historical deductions. Deduction entries remain at `/api/fines`.
 
 ### Tax
 - **Frontend today:** per-dispatcher taxable-pay (base + commission + fuel allowance) and tax-withheld breakdown for any month/year on file, CSV + PDF export.
@@ -49,12 +48,11 @@ The three were clearly designed together (the backend's `toApiShape()` functions
 - **Gap:** the rate is hardcoded (`DEFAULT_TAX_PERCENT = 1.5` in `data/dispatchers.js`) instead of being read from `GET /api/rates/tax/latest`, and there's no UI to change it (that's the Settings tab — see §5).
 
 ### Salary Slips
-- **Frontend today:** per-dispatcher slip builder, pre-filled from gross-on-file + fines-on-file, editable fields (gross override, late/violation fine, advance, cash split), generate/regenerate, PDF download, full history list.
-- **Backend today:** `salary_slips` table + `/api/salary-slips` (generate = upsert, matches the frontend's "regenerate overwrites" behavior exactly; fetch by dispatcher/period; delete).
-- **Wiring needed:** `slipService.generateSlip()` → `POST /api/salary-slips`; `fetchAllSlips()` → `GET /api/salary-slips`. Field names already match (`monthlyGrossUsd`, `commissionUsd`, `netPay`, etc.) — this is a clean swap.
+- **Frontend today:** per-employee slip builder, pre-filled from payroll and monthly deduction entries, with category-level deductions in the preview and generated PDF.
+- **Backend today:** `/api/salary-slips` stores a snapshot of the deduction category labels and amounts alongside each generated slip, so later category edits do not change issued slips.
 
 ### Reports
-- **Frontend today:** company-wide gross/payroll/expense/profit/tax summary for any period, weekly/monthly breakdown, CSV + PDF export.
+- **Frontend today:** company-wide gross, salary-earned, net-payroll-paid, expense, profit and tax summaries for any period; profit subtracts salary earned before deductions. Includes weekly/monthly breakdown and CSV + PDF export.
 - **Backend today:** no dedicated endpoint — like Payroll, this is a client-side aggregation over dispatchers + payroll_weeks + expenses + fines, which is the right approach (no new backend work needed beyond the underlying data being real).
 
 ### Settings — **does not exist yet**

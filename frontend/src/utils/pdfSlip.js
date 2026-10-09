@@ -182,6 +182,15 @@ export async function generateSlipPdf(slip) {
   const tableTopY = y + 3;
 
   const commissionLabel = `${slip.commissionPercent % 1 === 0 ? slip.commissionPercent.toFixed(0) : slip.commissionPercent.toFixed(1)}% Comisson USD:`;
+  const deductionRows = Array.isArray(slip.deductionsBreakdown)
+    ? slip.deductionsBreakdown.map((item) => ({
+        label: `${item.label}:`,
+        value: pkr(item.amount),
+      }))
+    : [
+        { label: "Late / Fine :", value: pkr(slip.lateFine) },
+        { label: "Violation / Fine :", value: pkr(slip.violationFine) },
+      ];
 
   const earningsEndY = keyValueTable(doc, {
     x: leftX,
@@ -214,8 +223,7 @@ export async function generateSlipPdf(slip) {
     y: tableTopY,
     width: colW,
     rows: [
-      { label: "Late / Fine :", value: pkr(slip.lateFine) },
-      { label: "Violation / Fine :", value: pkr(slip.violationFine) },
+      ...deductionRows,
       { label: "Advance", value: pkr(slip.advance) },
       { label: "Income Tax :", value: pkr(slip.incomeTax) },
       {

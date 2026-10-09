@@ -24,6 +24,15 @@ export const NAV_ITEMS = [
       { key: "salary-report", label: "Salary Report" },
     ],
   },
+  {
+    key: "properties-overview",
+    label: "Categories",
+    icon: "Tags",
+    children: [
+      { key: "expense-categories", label: "Expense Categories" },
+      { key: "deduction-categories", label: "Deduction Categories" },
+    ],
+  },
   { key: "tracking", label: "Tracking", icon: "Activity" },
   { key: "calendar", label: "Week Calendar", icon: "CalendarDays" },
   { key: "sync", label: "Sync Center", icon: "RefreshCw" },
@@ -113,6 +122,16 @@ export const TAB_DEFINITIONS = [
     label: "Salary Report",
     subtitle:
       "Review employee salary payouts and tax across generated salary slips.",
+  },
+  {
+    key: "expense-categories",
+    label: "Expense Categories",
+    subtitle: "Manage the categories available for monthly expense totals.",
+  },
+  {
+    key: "deduction-categories",
+    label: "Deduction Categories",
+    subtitle: "Manage the deduction categories recorded against employees.",
   },
   {
     key: "tracking",

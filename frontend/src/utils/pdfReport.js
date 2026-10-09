@@ -6,8 +6,8 @@ import { jsPDF } from "jspdf";
 import logoSrc from "../assets/logo.jpeg";
 import { EXPENSE_CATEGORIES } from "../data/expenses";
 
-const PAGE_W = 210;
-const PAGE_H = 297;
+const PAGE_W = 297;
+const PAGE_H = 210;
 const MARGIN = 16;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
@@ -60,6 +60,12 @@ function sectionTitle(doc, text, y) {
   return y + 10;
 }
 
+function ensureSectionSpace(doc, y, requiredHeight) {
+  if (y + requiredHeight <= PAGE_H - MARGIN - 12) return y;
+  doc.addPage();
+  return MARGIN + 10;
+}
+
 // Bordered label:value rows, value right-aligned (report figures read
 // better right-aligned than pdfSlip.js's left-aligned employee-info
 // table, since these are always numbers).
@@ -93,13 +99,29 @@ function keyValueTable(doc, { x, y, width, rows, labelWidth }) {
 // Paginated data table: draws a header row + body rows, starting a new
 // page (with the header repeated) whenever a row would run past the
 // bottom margin. Returns the y position just after the table.
-function dataTable(doc, { x, y, colWidths, headers, rows }) {
+function dataTable(
+  doc,
+  {
+    x,
+    y,
+    colWidths,
+    headers,
+    rows,
+    rowFontSize = 8.5,
+    fitWidth = false,
+    center = false,
+  },
+) {
   const rowH = 7.5;
-  const tableW = colWidths.reduce((a, b) => a + b, 0);
+  const originalTableW = colWidths.reduce((a, b) => a + b, 0);
+  const widthScale = fitWidth ? CONTENT_W / originalTableW : 1;
+  const widths = colWidths.map((width) => width * widthScale);
+  const tableW = widths.reduce((a, b) => a + b, 0);
+  const tableX = center || fitWidth ? (PAGE_W - tableW) / 2 : x;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   const headerLines = headers.map((header, index) =>
-    doc.splitTextToSize(header, colWidths[index] - 4),
+    doc.splitTextToSize(header, widths[index] - 4),
   );
   const headerH = Math.max(
     9,
@@ -108,49 +130,75 @@ function dataTable(doc, { x, y, colWidths, headers, rows }) {
 
   function drawHeader(atY) {
     doc.setFillColor(...ROUTE_COLOR);
-    doc.rect(x, atY, tableW, rowH, "F");
+    doc.rect(tableX, atY, tableW, headerH, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(255, 255, 255);
-    let cx = x;
+    let cx = tableX;
     headers.forEach((h, i) => {
       const align = i === 0 ? "left" : "right";
-      const tx = i === 0 ? cx + 2.2 : cx + colWidths[i] - 2.2;
+      const tx = i === 0 ? cx + 2.2 : cx + widths[i] - 2.2;
       const text = headerLines[i];
       doc.text(text, tx, atY + (headerH - text.length * 3.6) / 2 + 3, {
         align,
-        maxWidth: colWidths[i] - 4,
+        maxWidth: widths[i] - 4,
       });
-      cx += colWidths[i];
+      cx += widths[i];
     });
     doc.setTextColor(...INK_COLOR);
     return atY + headerH;
   }
 
+  const bottomLimit = PAGE_H - MARGIN - 12;
+  if (y + headerH + (rows.length ? rowH : 0) > bottomLimit) {
+    doc.addPage();
+    y = MARGIN + 10;
+  }
   let cursorY = drawHeader(y);
 
   rows.forEach((row, ri) => {
-    if (cursorY + rowH > PAGE_H - MARGIN) {
+    if (cursorY + rowH > bottomLimit) {
       doc.addPage();
       cursorY = drawHeader(MARGIN);
     }
     if (ri % 2 === 1) {
       doc.setFillColor(244, 244, 240);
-      doc.rect(x, cursorY, tableW, rowH, "F");
+      doc.rect(tableX, cursorY, tableW, rowH, "F");
     }
     doc.setDrawColor(215);
     doc.setLineWidth(0.15);
-    doc.rect(x, cursorY, tableW, rowH);
+    doc.rect(tableX, cursorY, tableW, rowH);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
     doc.setTextColor(...INK_COLOR);
-    let cx = x;
+    let cx = tableX;
     row.forEach((cell, i) => {
+      let text = String(cell);
       const align = i === 0 ? "left" : "right";
-      const tx = i === 0 ? cx + 2.2 : cx + colWidths[i] - 2.2;
-      doc.text(String(cell), tx, cursorY + rowH / 2 + 1.1, { align });
-      cx += colWidths[i];
+      const tx = i === 0 ? cx + 2.2 : cx + widths[i] - 2.2;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(rowFontSize);
+      const availableWidth = widths[i] - 4.4;
+      let textWidth = doc.getTextWidth(text);
+      if (textWidth > availableWidth) {
+        doc.setFontSize(
+          Math.max(5, rowFontSize * (availableWidth / textWidth)),
+        );
+        textWidth = doc.getTextWidth(text);
+        if (textWidth > availableWidth) {
+          const originalText = text;
+          let shortened = originalText;
+          while (
+            shortened.length > 0 &&
+            doc.getTextWidth(`${shortened}...`) > availableWidth
+          ) {
+            shortened = shortened.slice(0, -1);
+          }
+          text = shortened ? `${shortened}...` : "";
+        }
+      }
+      doc.text(text, tx, cursorY + rowH / 2 + 1.1, { align });
+      cx += widths[i];
     });
     cursorY += rowH;
   });
@@ -162,7 +210,11 @@ export async function generateReportPdf(
   report,
   { currency = "PKR", usdPerPkr = null } = {},
 ) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
 
   // Outer border, mirroring the salary slip's framed page.
   doc.setDrawColor(20);
@@ -238,6 +290,10 @@ export async function generateReportPdf(
         value: money(report.trackingFees, "PKR"),
       },
       {
+        label: "Total Salary Earned",
+        value: money(report.salaryEarned, "PKR"),
+      },
+      {
         label: "Net Payroll Paid",
         value: money(report.payroll, "PKR"),
       },
@@ -278,20 +334,22 @@ export async function generateReportPdf(
   );
 
   if (dispatcherRows.length > 0) {
+    y = ensureSectionSpace(doc, y, 42);
     y = sectionTitle(doc, "DISPATCHER PAYROLL", y) + 6;
     const headers = [
       "Dispatcher",
       "Gross",
       "Base",
-      "Commission",
+      "Comm.",
       "Tracking",
       "Fuel",
-      "Deductions",
+      "Earned",
+      "Deduct.",
       "Advance",
       "Tax",
       "Net pay",
     ];
-    const colWidths = [30, 15, 15, 18, 18, 14, 16, 14, 14, 18];
+    const colWidths = [34, 23, 20, 23, 23, 18, 26, 23, 22, 18, 24];
     const rows = dispatcherRows.map((row) => [
       row.dispatcherName,
       money(row.grossUsd, "USD"),
@@ -299,49 +357,59 @@ export async function generateReportPdf(
       money(row.commissionUsd, "USD"),
       money(row.trackingFee, "PKR"),
       money(row.fuelAllowance, "PKR"),
+      money(row.salary, "PKR"),
       money(row.deductions, "PKR"),
       money(row.advance, "PKR"),
       money(row.tax, "PKR"),
       money(row.netPay, "PKR"),
     ]);
-    y = dataTable(doc, { x: MARGIN, y, colWidths, headers, rows });
+    y = dataTable(doc, {
+      x: MARGIN,
+      y,
+      colWidths,
+      headers,
+      rows,
+      rowFontSize: 7.5,
+      center: true,
+    });
   }
 
   if (employeeRows.length > 0) {
-    y += 10;
-    if (y > PAGE_H - MARGIN - 40) {
-      doc.addPage();
-      y = MARGIN + 10;
-    }
+    y = ensureSectionSpace(doc, y + 10, 42);
     y = sectionTitle(doc, "FIXED-SALARY EMPLOYEES", y) + 6;
     const headers = [
       "Employee",
       "Base Salary",
+      "Salary Earned",
       "Deductions",
       "Advance",
       "Tax",
       "Net Pay",
     ];
-    const colWidths = [40, 28, 27, 27, 27, 29];
+    const colWidths = [34, 24, 28, 24, 24, 24, 24];
     const rows = employeeRows.map((row) => [
       row.dispatcherName,
       money(row.baseSalary, "PKR"),
+      money(row.salary, "PKR"),
       money(row.deductions, "PKR"),
       money(row.advance, "PKR"),
       money(row.tax, "PKR"),
       money(row.netPay, "PKR"),
     ]);
-    y = dataTable(doc, { x: MARGIN, y, colWidths, headers, rows });
+    y = dataTable(doc, {
+      x: MARGIN,
+      y,
+      colWidths,
+      headers,
+      rows,
+      fitWidth: true,
+    });
   }
 
   const breakdownRows = report.monthlyBreakdown;
 
   if (report.periodType === "Yearly" && breakdownRows?.length > 0) {
-    y += 12;
-    if (y > PAGE_H - MARGIN - 40) {
-      doc.addPage();
-      y = MARGIN + 10;
-    }
+    y = ensureSectionSpace(doc, y + 12, 42);
     y = sectionTitle(doc, "MONTHLY BREAKDOWN", y) + 6;
 
     // Yearly reports include a monthly breakdown with per-month tax and profit.
@@ -349,22 +417,24 @@ export async function generateReportPdf(
       "Period",
       "Gross",
       "Tracking",
+      "Salary earned",
       "Net payroll",
       "Expenses",
       "Deductions",
       "Tax",
       "Profit",
     ];
-    const bdColWidths = [24, 22, 22, 22, 22, 22, 22, 22];
+    const bdColWidths = [22, 20, 20, 24, 20, 19, 19, 19, 19];
     const bdRows = breakdownRows.map((row) => {
       const periodLabel = row.shortLabel;
       if (!row.reached) {
-        return [periodLabel, ...Array(7).fill("\u2014")];
+        return [periodLabel, ...Array(8).fill("\u2014")];
       }
       return [
         periodLabel,
         money(row.grossUsd, "USD"),
         money(row.trackingFees, "PKR"),
+        money(row.salaryEarned, "PKR"),
         money(row.payroll, "PKR"),
         money(row.expenses, "PKR"),
         money(row.deductions, "PKR"),
@@ -382,11 +452,7 @@ export async function generateReportPdf(
   }
 
   if (report.expenseCategories) {
-    y += 12;
-    if (y > PAGE_H - MARGIN - 35) {
-      doc.addPage();
-      y = MARGIN + 10;
-    }
+    y = ensureSectionSpace(doc, y + 12, 42);
     y =
       sectionTitle(
         doc,
@@ -397,7 +463,9 @@ export async function generateReportPdf(
       ) + 6;
     const categoryRows = Object.entries(report.expenseCategories).map(
       ([category, amount]) => [
-        EXPENSE_CATEGORIES[category]?.label ?? category,
+        report.expenseCategoryLabels?.[category] ??
+          EXPENSE_CATEGORIES[category]?.label ??
+          category,
         money(amount, "PKR"),
       ],
     );
@@ -408,14 +476,10 @@ export async function generateReportPdf(
       colWidths: [130, 48],
       headers: ["Category", "Amount"],
       rows: categoryRows,
+      center: true,
     });
   }
 
-  y += 14;
-  if (y > PAGE_H - MARGIN - 14) {
-    doc.addPage();
-    y = MARGIN + 10;
-  }
   doc.setFont("helvetica", "italic");
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
@@ -429,7 +493,7 @@ export async function generateReportPdf(
       },
     )}.`,
     PAGE_W / 2,
-    y,
+    PAGE_H - MARGIN - 3,
     { align: "center" },
   );
 

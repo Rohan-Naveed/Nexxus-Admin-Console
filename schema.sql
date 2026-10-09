@@ -190,34 +190,32 @@ ON CONFLICT (property_key) DO NOTHING;
 
 
 -- ---------------------------------------------------------------------
--- Expense categories — small lookup table (mirrors EXPENSE_CATEGORIES
--- in data/expenses.js) so new categories can be added later without a
--- migration, and so "cadence" (daily/monthly/flexible) stays data-driven.
+-- Expense categories — admins manage these through Properties. Archived
+-- categories remain available to historical expense records.
 -- ---------------------------------------------------------------------
 CREATE TABLE expense_categories (
     key             TEXT PRIMARY KEY,                    -- 'dinner', 'electricity', etc.
     label           TEXT NOT NULL,
-    cadence         TEXT NOT NULL CHECK (cadence IN ('daily', 'monthly', 'flexible'))
+    cadence         TEXT NOT NULL DEFAULT 'monthly' CHECK (cadence IN ('daily', 'monthly', 'flexible')),
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 INSERT INTO expense_categories (key, label, cadence) VALUES
-    ('dinner',        'Daily Dinner',     'daily'),
-    ('miscellaneous', 'Miscellaneous',    'flexible'),
+    ('dinner',        'Dinner',           'monthly'),
+    ('miscellaneous', 'Miscellaneous',    'monthly'),
     ('electricity',   'Electricity Bill', 'monthly'),
     ('gas',           'Gas Bill',         'monthly'),
     ('water',         'Water Bill',       'monthly');
 
 
 -- ---------------------------------------------------------------------
--- Expenses — flat list, one row per bill/purchase. Which month/week it
--- belongs to is always derived from expense_date, never stored
--- redundantly (matches src/utils/expenseCalc.js).
+-- Expenses — one amount per category per calendar month.
 -- ---------------------------------------------------------------------
 CREATE TABLE expenses (
     id              SERIAL PRIMARY KEY,
     category_key    TEXT NOT NULL REFERENCES expense_categories(key),
     amount          NUMERIC(12,2) NOT NULL,
-    expense_date    DATE NOT NULL,
+    expense_month   DATE NOT NULL,
     note            TEXT,
 
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -226,16 +224,17 @@ CREATE TABLE expenses (
     updated_by      TEXT
 );
 
-CREATE INDEX idx_expenses_date ON expenses(expense_date);
-CREATE INDEX idx_expenses_category ON expenses(category_key);
+CREATE UNIQUE INDEX idx_expenses_category_month ON expenses(category_key, expense_month);
 
 
 -- ---------------------------------------------------------------------
--- Fine types — lookup table (mirrors FINE_TYPES in data/fines.js).
+-- Deduction categories — admins manage these through Properties. Archived
+-- categories remain available to historical deductions.
 -- ---------------------------------------------------------------------
 CREATE TABLE fine_types (
     key             TEXT PRIMARY KEY,                    -- 'late', 'violation', 'other'
-    label           TEXT NOT NULL
+    label           TEXT NOT NULL,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 INSERT INTO fine_types (key, label) VALUES
@@ -312,6 +311,7 @@ CREATE TABLE salary_slips (
     advance             NUMERIC(12,2) NOT NULL DEFAULT 0,
     income_tax          NUMERIC(14,2) NOT NULL,
     total_deductions    NUMERIC(14,2) NOT NULL,
+    deductions_breakdown JSONB NOT NULL DEFAULT '[]'::jsonb,
     net_pay             NUMERIC(14,2) NOT NULL,
     cash_amount         NUMERIC(12,2) NOT NULL DEFAULT 0,
     account_amount      NUMERIC(14,2) NOT NULL,
