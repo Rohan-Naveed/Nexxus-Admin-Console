@@ -5,7 +5,7 @@ const logger = require("./logger/logger");
 
 const PORT = config.server.port;
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, "127.0.0.1", () => {
   logger.info(`Nexxus admin console API listening on port ${PORT}`);
 
   pool

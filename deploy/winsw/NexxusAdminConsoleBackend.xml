@@ -1,0 +1,16 @@
+<service>
+  <id>NexxusAdminConsoleBackend</id>
+  <name>NexxusAdminConsoleBackend</name>
+  <description>Nexxus Admin Console backend API</description>
+
+  <executable>C:\REPLACE_WITH_NODE_INSTALL_PATH\node.exe</executable>
+  <arguments>src\server.js</arguments>
+  <workingdirectory>C:\REPLACE_WITH_PROJECT_PATH\backend</workingdirectory>
+
+  <startmode>Automatic</startmode>
+  <stoptimeout>30 sec</stoptimeout>
+  <onfailure action="restart" delay="10 sec" />
+
+  <logpath>C:\REPLACE_WITH_PROJECT_PATH\backend\logs\winsw-api</logpath>
+  <log mode="roll" />
+</service>

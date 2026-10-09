@@ -1,0 +1,17 @@
+<service>
+  <id>NexxusAdminConsoleFrontend</id>
+  <name>Nexxus Admin Console Frontend</name>
+  <description>Nexxus Admin Console frontend static web server</description>
+
+  <executable>C:\REPLACE_WITH_NODE_INSTALL_PATH\node.exe</executable>
+  <arguments>src\frontendServer.js</arguments>
+  <workingdirectory>C:\REPLACE_WITH_PROJECT_PATH\backend</workingdirectory>
+  <env name="FRONTEND_PORT" value="3000" />
+
+  <startmode>Automatic</startmode>
+  <stoptimeout>30 sec</stoptimeout>
+  <onfailure action="restart" delay="10 sec" />
+
+  <logpath>C:\REPLACE_WITH_PROJECT_PATH\backend\logs\winsw-frontend</logpath>
+  <log mode="roll" />
+</service>
