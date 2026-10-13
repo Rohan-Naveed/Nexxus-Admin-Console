@@ -22,9 +22,11 @@ Run **one** file: `migrations/002_sync_center_and_week_calendar.sql`
 
 ## 3. Week Calendar (admin sets the weeks)
 
-- Tab **Week Calendar**: pick a month, Auto-fill Monday-Sunday (or build by
-  hand), click the day a week should END on. Each week starts the day after
-  the previous one ends. Several months can be set and saved at once.
+- Tab **Week Calendar**: use the arrows beside the month strip to move one
+  month at a time, including to previous months; pick a month, Auto-fill
+  Monday-Sunday (or build by hand), and click the day a week should END on.
+  Each week starts the day after the previous one ends. Several months can be
+  set and saved at once.
 - Rules enforced by the API (and mirrored in the UI):
   - weeks are numbered 1..n (max 6 per month), 1-14 days each,
     back-to-back, never overlapping (also a DB constraint);

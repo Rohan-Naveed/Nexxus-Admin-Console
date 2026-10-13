@@ -2533,15 +2533,28 @@ table {
   font-weight: 500;
 }
 
+.cal-month-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .cal-strip {
   display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 4px;
 }
 
-.cal-chip {
+.cal-month-nav-button {
   flex: 0 0 auto;
+}
+
+.cal-chip {
+  flex: 1 0 128px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -2610,6 +2623,43 @@ table {
   grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
   gap: 14px;
   align-items: start;
+}
+
+.cal-layout-next {
+  animation: cal-month-enter-next 220ms ease-out both;
+}
+
+.cal-layout-previous {
+  animation: cal-month-enter-previous 220ms ease-out both;
+}
+
+@keyframes cal-month-enter-next {
+  from {
+    opacity: 0.55;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cal-month-enter-previous {
+  from {
+    opacity: 0.55;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-layout-next,
+  .cal-layout-previous {
+    animation: none;
+  }
 }
 
 @media (max-width: 1000px) {

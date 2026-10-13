@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronsRight,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   MAX_WEEKS_PER_MONTH,
@@ -63,6 +65,7 @@ const MONTH_NAMES = [
   "November",
   "December",
 ];
+const MONTH_STRIP_SIZE = 9;
 
 const monthLabel = (key) => {
   const { year, month } = parseMonthKey(key);
@@ -92,6 +95,13 @@ function rowsToDraft(months) {
   return draft;
 }
 
+function shiftMonthKey(key, count) {
+  let shifted = key;
+  const shift = count < 0 ? prevMonthKey : nextMonthKey;
+  for (let i = 0; i < Math.abs(count); i += 1) shifted = shift(shifted);
+  return shifted;
+}
+
 export default function WeekCalendarTab({
   calendarService,
   initialMonth,
@@ -102,7 +112,10 @@ export default function WeekCalendarTab({
   const [today, setToday] = useState("");
   const [timezone, setTimezone] = useState("");
   const [monthKeys, setMonthKeys] = useState([]);
+  const [visibleMonthKeys, setVisibleMonthKeys] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [monthTransitionDirection, setMonthTransitionDirection] =
+    useState("next");
   const [activeIdx, setActiveIdx] = useState(0);
   const [fillCount, setFillCount] = useState(3);
   const [loading, setLoading] = useState(true);
@@ -111,11 +124,16 @@ export default function WeekCalendarTab({
   const [notice, setNotice] = useState(null);
 
   const load = useCallback(
-    async (keepSelection) => {
+    async () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await calendarService.getCalendar();
+        const data = initialMonth
+          ? await calendarService.getCalendar(
+              shiftMonthKey(initialMonth, -3),
+              shiftMonthKey(initialMonth, 6),
+            )
+          : await calendarService.getCalendar();
         const next = rowsToDraft(data.months);
         setOriginal(next);
         setDraft(next);
@@ -123,16 +141,22 @@ export default function WeekCalendarTab({
         setTimezone(data.timezone);
         const keys = data.months.map((m) => monthKey(m.year, m.month));
         setMonthKeys(keys);
-        if (!keepSelection) {
-          const currentKey = data.today.slice(0, 7);
-          setSelected(
-            initialMonth && keys.includes(initialMonth)
-              ? initialMonth
-              : keys.includes(currentKey)
-                ? currentKey
-                : keys[0],
-          );
-        }
+        const currentKey = data.today.slice(0, 7);
+        const selectedKey =
+          initialMonth && keys.includes(initialMonth)
+            ? initialMonth
+            : keys.includes(currentKey)
+              ? currentKey
+              : keys[0];
+        const selectedIndex = keys.indexOf(selectedKey);
+        const visibleStart = Math.min(
+          Math.max(0, selectedIndex - 2),
+          Math.max(0, keys.length - MONTH_STRIP_SIZE),
+        );
+        setVisibleMonthKeys(
+          keys.slice(visibleStart, visibleStart + MONTH_STRIP_SIZE),
+        );
+        setSelected(selectedKey);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -143,7 +167,7 @@ export default function WeekCalendarTab({
   );
 
   useEffect(() => {
-    load(false);
+    load();
   }, [load]);
 
   const problems = useMemo(() => validateDraft(draft, today), [draft, today]);
@@ -174,7 +198,55 @@ export default function WeekCalendarTab({
   }
 
   function selectMonth(key) {
+    if (selected && key !== selected) {
+      setMonthTransitionDirection(key > selected ? "next" : "previous");
+    }
     setSelected(key);
+    setActiveIdx(0);
+    setNotice(null);
+  }
+
+  async function moveMonth(direction) {
+    if (loading || !selected) return;
+    const target = shiftMonthKey(selected, direction);
+    const cached = new Set(monthKeys);
+
+    if (!cached.has(target)) {
+      setLoading(true);
+      setError(null);
+      try {
+        const from = prevMonthKey(target);
+        const to = nextMonthKey(target);
+        const data = await calendarService.getCalendar(from, to);
+        const next = rowsToDraft(data.months);
+        setOriginal((current) => ({ ...current, ...next }));
+        setDraft((current) => {
+          const merged = { ...current };
+          Object.entries(next).forEach(([key, weeks]) => {
+            if (!Object.hasOwn(merged, key)) merged[key] = weeks;
+          });
+          return merged;
+        });
+        setMonthKeys((current) =>
+          [...new Set([...current, ...Object.keys(next)])].sort(),
+        );
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    }
+
+    setMonthTransitionDirection(direction > 0 ? "next" : "previous");
+    if (!visibleMonthKeys.includes(target)) {
+      setVisibleMonthKeys((current) =>
+        direction > 0
+          ? [...current.slice(1), target]
+          : [target, ...current.slice(0, MONTH_STRIP_SIZE - 1)],
+      );
+    }
+    setSelected(target);
     setActiveIdx(0);
     setNotice(null);
   }
@@ -295,8 +367,10 @@ export default function WeekCalendarTab({
     if (problems.length > 0 || changed.length === 0) return;
     setSaving(true);
     setError(null);
+    const savedDraft = draft;
+    const savedKeys = [...changed];
     try {
-      const months = changed.map((key) => {
+      const months = savedKeys.map((key) => {
         const { year, month } = parseMonthKey(key);
         return {
           year,
@@ -309,10 +383,16 @@ export default function WeekCalendarTab({
         };
       });
       await calendarService.saveMonths(months);
+      setOriginal((current) => {
+        const next = { ...current };
+        savedKeys.forEach((key) => {
+          next[key] = savedDraft[key] || [];
+        });
+        return next;
+      });
       setNotice(
         `Saved ${months.length} month${months.length === 1 ? "" : "s"}.`,
       );
-      await load(true);
       onSaved?.();
     } catch (err) {
       setError(err.message);
@@ -401,34 +481,57 @@ export default function WeekCalendarTab({
       )}
 
       {/* ---- month strip ---- */}
-      <div className="cal-strip">
-        {monthKeys.map((key) => {
-          const status = chipStatus(key);
-          const w = draft[key] || [];
-          return (
-            <button
-              key={key}
-              className={`cal-chip cal-chip-${status} ${selected === key ? "active" : ""}`}
-              onClick={() => selectMonth(key)}
-            >
-              <span className="cal-chip-month">{monthLabel(key)}</span>
-              <span className="cal-chip-state">
-                {status === "missing" && "Not set"}
-                {status === "set" && `${w.length} weeks`}
-                {status === "locked" && (
-                  <>
-                    <Lock size={10} /> {w.length} weeks
-                  </>
-                )}
-                {status === "edited" && "Edited"}
-              </span>
-            </button>
-          );
-        })}
+      <div className="cal-month-navigation">
+        <button
+          className="icon-btn cal-month-nav-button"
+          aria-label="Previous month"
+          title="Previous month"
+          disabled={loading}
+          onClick={() => moveMonth(-1)}
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <div className="cal-strip">
+          {visibleMonthKeys.map((key) => {
+            const status = chipStatus(key);
+            const w = draft[key] || [];
+            return (
+              <button
+                key={key}
+                className={`cal-chip cal-chip-${status} ${selected === key ? "active" : ""}`}
+                onClick={() => selectMonth(key)}
+              >
+                <span className="cal-chip-month">{monthLabel(key)}</span>
+                <span className="cal-chip-state">
+                  {status === "missing" && "Not set"}
+                  {status === "set" && `${w.length} weeks`}
+                  {status === "locked" && (
+                    <>
+                      <Lock size={10} /> {w.length} weeks
+                    </>
+                  )}
+                  {status === "edited" && "Edited"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          className="icon-btn cal-month-nav-button"
+          aria-label="Next month"
+          title="Next month"
+          disabled={loading}
+          onClick={() => moveMonth(1)}
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
 
       {selected && (
-        <div className="cal-layout">
+        <div
+          key={selected}
+          className={`cal-layout cal-layout-${monthTransitionDirection}`}
+        >
           {/* ---- day grid ---- */}
           <div className="panel">
             <div className="section-head">
