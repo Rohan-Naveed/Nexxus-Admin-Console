@@ -47,6 +47,7 @@ function toApiShape(row) {
     advance: Number(row.advance),
     incomeTax: Number(row.income_tax),
     totalDeductions: Number(row.total_deductions),
+    bonus: Number(row.bonus ?? 0),
     netPay: Number(row.net_pay),
     cashAmount: Number(row.cash_amount),
     accountAmount: Number(row.account_amount),
@@ -147,6 +148,11 @@ async function generate(slip, actor) {
     );
   }
 
+  const bonus = slip.bonus == null ? 0 : Number(slip.bonus);
+  if (!Number.isFinite(bonus) || bonus < 0) {
+    throw new ApiError(400, "Bonus must be a non-negative amount.");
+  }
+
   const params = [
     slip.dispatcherId,
     slip.periodYear,
@@ -172,6 +178,7 @@ async function generate(slip, actor) {
     slip.advance ?? 0,
     slip.incomeTax,
     slip.totalDeductions,
+    bonus,
     slip.netPay,
     slip.cashAmount ?? 0,
     slip.accountAmount,

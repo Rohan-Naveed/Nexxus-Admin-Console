@@ -107,6 +107,7 @@ export default function SlipPreviewCard({
     (item) => item.amount > 0,
   );
   const [advance, setAdvance] = useState(String(existingSlip?.advance ?? 0));
+  const [bonus, setBonus] = useState(String(existingSlip?.bonus ?? 0));
   const [accountAmount, setAccountAmount] = useState(
     String(existingSlip?.accountAmount ?? 0),
   );
@@ -131,6 +132,7 @@ export default function SlipPreviewCard({
         usdPerPkr: usdPerPkr ?? 0,
         taxPercent,
         monthlyGrossUsd,
+        bonus: toNumber(bonus),
         deductionsBreakdown,
         advance: toNumber(advance),
         accountAmount: toNumber(accountAmount),
@@ -143,6 +145,7 @@ export default function SlipPreviewCard({
       usdPerPkr,
       taxPercent,
       monthlyGrossUsd,
+      bonus,
       deductionsBreakdown,
       advance,
       accountAmount,
@@ -152,15 +155,17 @@ export default function SlipPreviewCard({
   );
   const payoutAmountError =
     payoutMode === "cash"
-      ? toNumber(cashAmount) < 0
-        ? "Cash amount cannot be negative."
-        : preview.accountAmount < -0.005
-          ? "Cash amount is too high; it would require a negative account payment after tax and other deductions."
-          : ""
+      ? toNumber(cashAmount) < preview.bonus
+        ? "Cash amount cannot be less than the bonus paid after deductions."
+        : toNumber(cashAmount) < 0
+          ? "Cash amount cannot be negative."
+          : preview.accountAmount < -0.005
+            ? "Cash amount is too high; it would require a negative account payment after tax and other deductions."
+            : ""
       : preview.accountAmount < 0
         ? "Account amount cannot be negative."
-        : preview.cashAmount < -0.005
-          ? "Account amount is too high; it would leave a negative cash payment after tax and other deductions."
+        : preview.cashAmount < preview.bonus - 0.005
+          ? "Account amount is too high; the bonus is paid in cash after deductions."
           : "";
 
   async function handleGenerate() {
@@ -384,6 +389,12 @@ export default function SlipPreviewCard({
               onChange={setAdvance}
             />
             <NumberField
+              id={`bonus-${dispatcher.id}`}
+              label="Bonus (PKR)"
+              value={bonus}
+              onChange={setBonus}
+            />
+            <NumberField
               id={`account-${dispatcher.id}`}
               label="Account amount (PKR)"
               value={payoutMode === "account" ? accountAmount : preview.accountAmount}
@@ -404,7 +415,8 @@ export default function SlipPreviewCard({
           </div>
           <div className="panel-sub">
             Edit either payout amount. Income tax is calculated on the account
-            amount, and the other payout amount updates automatically.
+            amount before bonus. The bonus is added to cash after deductions
+            and tax, and the other payout amount updates automatically.
           </div>
           {payoutAmountError && (
             <div className="form-error">{payoutAmountError}</div>
@@ -453,6 +465,10 @@ export default function SlipPreviewCard({
               <div className="slip-line slip-line-strong">
                 <span>Total earnings</span>
                 <span>{fmtMoney(preview.totalEarnings, "PKR")}</span>
+              </div>
+              <div className="slip-line slip-line-accent">
+                <span>Bonus (added after tax)</span>
+                <span>{fmtMoney(preview.bonus, "PKR")}</span>
               </div>
             </div>
 

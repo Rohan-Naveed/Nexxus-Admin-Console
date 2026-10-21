@@ -44,6 +44,7 @@ export function computeSlipPreview({
   usdPerPkr,
   taxPercent,
   monthlyGrossUsd,
+  bonus = 0,
   lateFine = 0,
   violationFine = 0,
   deductionsBreakdown,
@@ -95,6 +96,7 @@ export function computeSlipPreview({
     0,
   );
   const adv = Number(advance) || 0;
+  const bonusAmount = Math.max(0, Number(bonus) || 0);
   const enteredAccount = Number(accountAmount) || 0;
   const enteredCash = Number(cashAmount) || 0;
   const taxRate = (Number(taxPercent) || 0) / 100;
@@ -106,11 +108,17 @@ export function computeSlipPreview({
 
   if (payoutMode === "cash") {
     cash = enteredCash;
-    account = Number((earningsAfterOtherDeductions - cash).toFixed(2));
+    account = Number(
+      (earningsAfterOtherDeductions - (cash - bonusAmount)).toFixed(2),
+    );
     for (let i = 0; i < 100; i += 1) {
       incomeTax = Number((Math.max(0, account) * taxRate).toFixed(2));
       const nextAccount = Number(
-        (earningsAfterOtherDeductions - cash - incomeTax).toFixed(2),
+        (
+          earningsAfterOtherDeductions -
+          (cash - bonusAmount) -
+          incomeTax
+        ).toFixed(2),
       );
       if (nextAccount === account) break;
       account = nextAccount;
@@ -121,7 +129,7 @@ export function computeSlipPreview({
   }
   const totalDeductions = loggedDeductions + adv + incomeTax;
 
-  const netPay = totalEarnings - totalDeductions;
+  const netPay = totalEarnings - totalDeductions + bonusAmount;
   if (payoutMode !== "cash") cash = netPay - account;
 
   return {
@@ -136,6 +144,7 @@ export function computeSlipPreview({
     basicSalary,
     fuelAllowance,
     totalEarnings,
+    bonus: bonusAmount,
     lateFine: late,
     violationFine: violation,
     deductionsBreakdown: deductionItems,

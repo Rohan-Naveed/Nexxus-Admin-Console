@@ -19,6 +19,7 @@ import {
   getMonthlyReport,
   getYearlyReport,
 } from "../utils/reportsCalc";
+import { getEffectiveUsdRate } from "../utils/rates";
 import { isMonthInProgressKey } from "../utils/periods";
 import { downloadReportCsv } from "../utils/reportExport";
 import { downloadReportPdf } from "../utils/pdfReport";
@@ -34,6 +35,41 @@ function fmtUsd(value) {
       maximumFractionDigits: 2,
     })
   );
+}
+
+function fmtReportMoney(report, pkrField, usdField, currency, usdRates) {
+  if (currency !== "USD") {
+    return fmtMoney(report[pkrField], currency, null);
+  }
+
+  if (report.periodType === "Monthly") {
+    if (usdField && report[usdField] != null) {
+      return fmtUsd(report[usdField]);
+    }
+    const rate = getEffectiveUsdRate(usdRates, report.periodKey);
+    return rate
+      ? fmtUsd(Number(report[pkrField]) / rate.ratePkrPerUsd)
+      : "—";
+  }
+
+  const monthlyBreakdown = report.monthlyBreakdown ?? [];
+  if (monthlyBreakdown.length === 0) {
+    return usdField && report[usdField] != null
+      ? fmtUsd(report[usdField])
+      : "—";
+  }
+
+  let totalUsd = 0;
+  for (const month of monthlyBreakdown) {
+    if (usdField && month[usdField] != null) {
+      totalUsd += Number(month[usdField]) || 0;
+      continue;
+    }
+    const rate = getEffectiveUsdRate(usdRates, month.monthKey);
+    if (!rate) return "—";
+    totalUsd += (Number(month[pkrField]) || 0) / rate.ratePkrPerUsd;
+  }
+  return fmtUsd(totalUsd);
 }
 
 function fmtCurrencyPair(amountPkr, amountUsd, currency, usdPerPkr) {
@@ -433,25 +469,49 @@ export default function ReportsTab({
           <div className="stats-grid">
             <KPICard
               label={`Total Gross \u00b7 ${report.label}`}
-              value={fmtMoney(report.gross, currency, usdPerPkr)}
+              value={fmtReportMoney(
+                report,
+                "gross",
+                "grossUsd",
+                currency,
+                usdRates,
+              )}
               sub="Dispatcher gross only"
               icon={TrendingUp}
             />
             <KPICard
               label={`Tracking income \u00b7 ${report.label}`}
-              value={fmtMoney(report.trackingFees, currency, usdPerPkr)}
+              value={fmtReportMoney(
+                report,
+                "trackingFees",
+                "trackingFeesUsd",
+                currency,
+                usdRates,
+              )}
               sub="Tracking revenue generated from dispatcher gross"
               icon={Wallet}
             />
             <KPICard
               label={`Total salary earned \u00b7 ${report.label}`}
-              value={fmtMoney(report.salaryEarned, currency, usdPerPkr)}
+              value={fmtReportMoney(
+                report,
+                "salaryEarned",
+                null,
+                currency,
+                usdRates,
+              )}
               sub="Employee earnings before deductions, advances and tax"
               icon={Wallet}
             />
             <KPICard
               label={`Expenses \u00b7 ${report.label}`}
-              value={fmtMoney(report.expenses, currency, usdPerPkr)}
+              value={fmtReportMoney(
+                report,
+                "expenses",
+                null,
+                currency,
+                usdRates,
+              )}
               sub={
                 report.periodType === "Yearly" && report.hasDetail === false
                   ? "Not tracked for this year"
@@ -461,13 +521,19 @@ export default function ReportsTab({
             />
             <KPICard
               label={`Net Profit \u00b7 ${report.label}`}
-              value={fmtMoney(report.profit, currency, usdPerPkr)}
+              value={fmtReportMoney(
+                report,
+                "profit",
+                null,
+                currency,
+                usdRates,
+              )}
               sub="Gross + tracking income − salary earned − expenses"
               icon={PiggyBank}
             />
             <KPICard
               label={`Tax withheld / estimated \u00b7 ${report.label}`}
-              value={fmtMoney(report.tax, currency, usdPerPkr)}
+              value={fmtReportMoney(report, "tax", null, currency, usdRates)}
               sub={
                 report.periodType === "Monthly"
                   ? `Saved-slip tax is actual; unsaved current-month dispatcher rows assume full account payout at ${report.taxPercent}%`

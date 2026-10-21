@@ -29,7 +29,7 @@ export function buildSalaryReportData(slips, fromMonth, toMonth) {
           (slip.totalDeductions == null
             ? taxDeducted
             : Number(slip.totalDeductions) || 0)
-        : Number(slip.totalEarnings) || 0;
+        : (Number(slip.totalEarnings) || 0) + (Number(slip.bonus) || 0);
     const employee = employeeMap.get(employeeId) || {
       dispatcherId: employeeId,
       dispatcherName: slip.dispatcherName,

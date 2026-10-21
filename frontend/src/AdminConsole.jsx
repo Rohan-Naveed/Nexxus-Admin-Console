@@ -347,12 +347,13 @@ export default function AdminConsole({ user, onLogout, theme, onToggleTheme }) {
       const gross = isDispatcher ? (employee.gross?.[period] ?? 0) : 0;
       const baseSalary = employee.basicSalary?.[period] ?? 0;
       const commission = isDispatcher ? gross * (employee.percentage ?? 0) : 0;
-      const total = baseSalary + commission;
-      const deductions = fineTotals.get(String(employee.id)) ?? 0;
       const salarySlip =
         period === "Monthly"
           ? currentMonthSlips.get(String(employee.id))
           : null;
+      const bonus = Number(salarySlip?.bonus) || 0;
+      const total = baseSalary + commission + bonus;
+      const deductions = fineTotals.get(String(employee.id)) ?? 0;
       const status =
         period !== "Monthly"
           ? "—"

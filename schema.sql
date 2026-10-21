@@ -311,6 +311,7 @@ CREATE TABLE salary_slips (
     advance             NUMERIC(12,2) NOT NULL DEFAULT 0,
     income_tax          NUMERIC(14,2) NOT NULL,
     total_deductions    NUMERIC(14,2) NOT NULL,
+    bonus               NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (bonus >= 0),
     deductions_breakdown JSONB NOT NULL DEFAULT '[]'::jsonb,
     net_pay             NUMERIC(14,2) NOT NULL,
     cash_amount         NUMERIC(12,2) NOT NULL DEFAULT 0,

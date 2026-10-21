@@ -207,11 +207,23 @@ export async function generateSlipPdf(slip) {
             labelColor: ROUTE_COLOR,
             valueColor: ROUTE_COLOR,
           },
+          {
+            label: "Bonus (post-tax):",
+            value: pkr(slip.bonus),
+            labelColor: ROUTE_COLOR,
+            valueColor: ROUTE_COLOR,
+          },
         ]
       : [
           {
             label: "Base Salary",
             value: pkr(slip.basicSalary),
+            labelColor: ROUTE_COLOR,
+            valueColor: ROUTE_COLOR,
+          },
+          {
+            label: "Bonus (post-tax):",
+            value: pkr(slip.bonus),
             labelColor: ROUTE_COLOR,
             valueColor: ROUTE_COLOR,
           },

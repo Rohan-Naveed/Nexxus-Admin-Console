@@ -389,7 +389,8 @@ export function getMonthlyReport(
       ? Number(savedSlip.totalEarnings) ||
         salaryBase + salaryCommission + salaryFuelAllowance
       : base + commission + fuelAllowance;
-    if (employeeActive || salary > 0) anySynced = true;
+    const bonus = Number(savedSlip?.bonus) || 0;
+    if (employeeActive || salary > 0 || bonus > 0) anySynced = true;
     const savedFines = savedSlip
       ? Array.isArray(savedSlip.deductionsBreakdown)
         ? savedSlip.deductionsBreakdown.reduce(
@@ -418,7 +419,7 @@ export function getMonthlyReport(
     trackingFees += dTrackingFee;
     trackingFeesUsd += dTrackingFeeUsd;
     payroll += netPay;
-    salaryEarned += salary;
+    salaryEarned += salary + bonus;
     advances += advance;
 
     return {
@@ -433,7 +434,7 @@ export function getMonthlyReport(
       baseSalary: salaryBase,
       commission: savedSlip ? salaryCommission : commission,
       commissionUsd: salaryCommissionUsd,
-      salary,
+      salary: salary + bonus,
       fuelAllowance: salaryFuelAllowance,
       deductions: dedAmount,
       advance,
