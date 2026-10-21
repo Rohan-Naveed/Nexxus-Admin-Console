@@ -290,7 +290,10 @@ export async function generateReportPdf(
         value: money(report.trackingFees, "PKR"),
       },
       {
-        label: "Total Salary Earned",
+        label:
+          report.periodType === "Monthly"
+            ? "Total Salary Given"
+            : "Total Salary Earned",
         value: money(report.salaryEarned, "PKR"),
       },
       {

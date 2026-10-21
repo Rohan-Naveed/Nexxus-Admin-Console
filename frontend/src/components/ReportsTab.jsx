@@ -492,7 +492,7 @@ export default function ReportsTab({
               icon={Wallet}
             />
             <KPICard
-              label={`Total salary earned \u00b7 ${report.label}`}
+              label={`Total salary given \u00b7 ${report.label}`}
               value={fmtReportMoney(
                 report,
                 "salaryEarned",
