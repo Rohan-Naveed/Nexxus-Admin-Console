@@ -142,7 +142,7 @@ async function sendSalarySlipEmail({
   await transporter.sendMail({
     from: `"${fromName}" <${smtp.user}>`,
     to,
-    cc: "raahimabid4@gmail.com",
+    cc: "accounts@nexxusdispatch.com",
     subject: `Salary slip - ${periodLabel}`,
     text: `Dear ${dispatcherName},\n\nPlease find your salary slip for ${periodLabel} attached.\n\nRegards,\nNexxus Logistics`,
     html: buildSalarySlipEmailHtml({
